@@ -77,6 +77,7 @@ def check_auth():
 
     # Public routes
     public_routes = [
+        "/",
         "/login",
         "/verify-session"
     ]
@@ -178,7 +179,9 @@ app.register_blueprint(
 # ==========================
 # HOME PAGE
 # ==========================
-
+@app.route("/")
+def home():
+    return redirect("/login")
 
 
 # ==========================
