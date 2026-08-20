@@ -1,0 +1,196 @@
+<!-- ==========================================
+        CafeSync Hamburger Menu
+========================================== -->
+
+<header class="topbar">
+
+    <!-- Hamburger -->
+
+    <button id="menuToggle" class="menu-btn">
+
+        <i class="fas fa-bars"></i>
+
+    </button>
+
+    <!-- Logo -->
+
+    <div class="logo">
+
+        <i class="fas fa-mug-hot"></i>
+
+        <span>CafeSync</span>
+
+    </div>
+
+    <!-- Right Side -->
+
+    <div class="top-actions">
+
+        <button id="darkModeBtn">
+
+            <i class="fas fa-moon"></i>
+
+        </button>
+
+        <img
+
+        src="{{ url_for('static', filename='images/avatar.png') }}"
+
+        class="profile"
+
+        >
+
+    </div>
+
+</header>
+
+
+<!-- ==========================================
+            Side Menu
+========================================== -->
+
+<div id="menuOverlay"></div>
+
+<nav id="sideMenu">
+
+    <div class="menu-header">
+
+        <img
+
+        src="{{ url_for('static', filename='images/avatar.png') }}"
+
+        class="menu-avatar">
+
+        <h3>{{ session.get("username","Admin") }}</h3>
+
+        <small>Cafe Manager</small>
+
+    </div>
+
+
+    <ul>
+
+        <li>
+
+            <a href="/">
+
+                <i class="fas fa-chart-line"></i>
+
+                Dashboard
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/billing">
+
+                <i class="fas fa-cash-register"></i>
+
+                Billing
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/orders">
+
+                <i class="fas fa-receipt"></i>
+
+                Orders
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/inventory">
+
+                <i class="fas fa-boxes"></i>
+
+                Inventory
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/kitchen">
+
+                <i class="fas fa-utensils"></i>
+
+                Kitchen
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/delivery">
+
+                <i class="fas fa-motorcycle"></i>
+
+                Delivery
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/reports">
+
+                <i class="fas fa-chart-pie"></i>
+
+                Reports
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/employees">
+
+                <i class="fas fa-users"></i>
+
+                Employees
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/settings">
+
+                <i class="fas fa-cog"></i>
+
+                Settings
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="#" id="logoutBtn">
+
+                <i class="fas fa-sign-out-alt"></i>
+
+                Logout
+
+            </a>
+
+        </li>
+        
+
+    </ul>
+
+</nav>

@@ -1,0 +1,1025 @@
+/*==========================================================
+                    CafeSync POS
+                    menu.css
+                    PART 1
+==========================================================*/
+
+
+/*==========================================================
+                    TOP BAR
+==========================================================*/
+
+.topbar{
+
+    position:fixed;
+
+    top:0;
+
+    left:0;
+
+    width:100%;
+
+    height:65px;
+
+    background:#ffffff;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:space-between;
+
+    padding:0 25px;
+
+    box-shadow:0 2px 12px rgba(0,0,0,.08);
+
+    z-index:1000;
+
+}
+
+
+/*==========================================================
+                    MENU BUTTON
+==========================================================*/
+
+.menu-btn{
+
+    width:45px;
+
+    height:45px;
+
+    border:none;
+
+    background:none;
+
+    cursor:pointer;
+
+    font-size:22px;
+
+    color:#333;
+
+    transition:.3s;
+
+}
+
+
+.menu-btn:hover{
+
+    color:#ff6b00;
+
+    transform:rotate(90deg);
+
+}
+
+
+/*==========================================================
+                        LOGO
+==========================================================*/
+
+.logo{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+    font-size:24px;
+
+    font-weight:700;
+
+    color:#ff6b00;
+
+}
+
+
+.logo i{
+
+    font-size:28px;
+
+}
+
+
+/*==========================================================
+                    TOP ACTIONS
+==========================================================*/
+
+.top-actions{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:15px;
+
+}
+
+
+.top-actions button{
+
+    width:42px;
+
+    height:42px;
+
+    border:none;
+
+    border-radius:50%;
+
+    cursor:pointer;
+
+    background:#f5f5f5;
+
+    transition:.3s;
+
+}
+
+
+.top-actions button:hover{
+
+    background:#ff6b00;
+
+    color:#fff;
+
+}
+
+
+/*==========================================================
+                    PROFILE
+==========================================================*/
+
+.profile{
+
+    width:42px;
+
+    height:42px;
+
+    border-radius:50%;
+
+    object-fit:cover;
+
+    cursor:pointer;
+
+    border:2px solid #ff6b00;
+
+}
+
+
+/*==========================================================
+                    MENU OVERLAY
+==========================================================*/
+
+#menuOverlay{
+
+    position:fixed;
+
+    inset:0;
+
+    background:rgba(0,0,0,.45);
+
+    display:none;
+
+    z-index:998;
+
+}
+
+
+#menuOverlay.active{
+
+    display:block;
+
+}
+
+
+/*==========================================================
+                    SIDE MENU
+==========================================================*/
+
+#sideMenu{
+
+    position:fixed;
+
+    top:0;
+
+    left:-300px;
+
+    width:290px;
+
+    height:100vh;
+
+    background:#ffffff;
+
+    box-shadow:5px 0 20px rgba(0,0,0,.15);
+
+    transition:.35s;
+
+    z-index:999;
+
+    overflow-y:auto;
+
+}
+
+
+#sideMenu.active{
+
+    left:0;
+
+}
+
+/*==========================================================
+                    CafeSync POS
+                    menu.css
+                    PART 2
+            MENU HEADER & MENU ITEMS
+==========================================================*/
+
+
+/*==========================================================
+                    MENU HEADER
+==========================================================*/
+
+.menu-header{
+
+    display:flex;
+
+    flex-direction:column;
+
+    align-items:center;
+
+    justify-content:center;
+
+    padding:35px 20px;
+
+    background:linear-gradient(
+
+        135deg,
+
+        #ff6b00,
+
+        #ff8f3d
+
+    );
+
+    color:#fff;
+
+}
+
+
+.menu-avatar{
+
+    width:90px;
+
+    height:90px;
+
+    border-radius:50%;
+
+    border:4px solid rgba(255,255,255,.4);
+
+    object-fit:cover;
+
+    margin-bottom:15px;
+
+}
+
+
+.menu-header h3{
+
+    font-size:22px;
+
+    font-weight:700;
+
+    margin-bottom:5px;
+
+}
+
+
+.menu-header small{
+
+    font-size:14px;
+
+    opacity:.9;
+
+}
+
+
+/*==========================================================
+                    MENU LIST
+==========================================================*/
+
+#sideMenu ul{
+
+    list-style:none;
+
+    padding:20px 0;
+
+    margin:0;
+
+}
+
+
+#sideMenu ul li{
+
+    width:100%;
+
+}
+
+
+/*==========================================================
+                    MENU LINKS
+==========================================================*/
+
+#sideMenu ul li a{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:16px;
+
+    padding:16px 25px;
+
+    color:#333;
+
+    text-decoration:none;
+
+    font-size:16px;
+
+    font-weight:500;
+
+    transition:.3s;
+
+}
+
+
+#sideMenu ul li a i{
+
+    width:24px;
+
+    text-align:center;
+
+    font-size:18px;
+
+    color:#ff6b00;
+
+}
+
+
+/*==========================================================
+                    HOVER EFFECT
+==========================================================*/
+
+#sideMenu ul li a:hover{
+
+    background:#fff4eb;
+
+    color:#ff6b00;
+
+    padding-left:35px;
+
+}
+
+
+#sideMenu ul li a:hover i{
+
+    transform:scale(1.15);
+
+}
+
+
+/*==========================================================
+                    ACTIVE MENU
+==========================================================*/
+
+#sideMenu ul li a.active{
+
+    background:#ff6b00;
+
+    color:#fff;
+
+    border-left:5px solid #ff9f4d;
+
+}
+
+
+#sideMenu ul li a.active i{
+
+    color:#fff;
+
+}
+
+
+/*==========================================================
+                    MENU DIVIDER
+==========================================================*/
+
+.menu-divider{
+
+    height:1px;
+
+    margin:15px 20px;
+
+    background:#e5e5e5;
+
+}
+
+
+/*==========================================================
+                SCROLLBAR
+==========================================================*/
+
+#sideMenu::-webkit-scrollbar{
+
+    width:6px;
+
+}
+
+#sideMenu::-webkit-scrollbar-track{
+
+    background:#f1f1f1;
+
+}
+
+#sideMenu::-webkit-scrollbar-thumb{
+
+    background:#ff6b00;
+
+    border-radius:20px;
+
+}
+/*==========================================================
+                    CafeSync POS
+                    menu.css
+                    PART 3
+            DARK MODE • ANIMATIONS • RESPONSIVE
+==========================================================*/
+
+
+/*==========================================================
+                    DARK MODE
+==========================================================*/
+
+body.dark{
+
+    background:#111827;
+
+    color:#f3f4f6;
+
+}
+
+
+body.dark .topbar{
+
+    background:#1f2937;
+
+    box-shadow:0 2px 15px rgba(0,0,0,.45);
+
+}
+
+
+body.dark .logo{
+
+    color:#ff8c42;
+
+}
+
+
+body.dark .menu-btn{
+
+    color:#f3f4f6;
+
+}
+
+
+body.dark .menu-btn:hover{
+
+    color:#ff8c42;
+
+}
+
+
+body.dark .top-actions button{
+
+    background:#374151;
+
+    color:#f3f4f6;
+
+}
+
+
+body.dark .top-actions button:hover{
+
+    background:#ff6b00;
+
+}
+
+
+body.dark #sideMenu{
+
+    background:#1f2937;
+
+}
+
+
+body.dark #sideMenu ul li a{
+
+    color:#f3f4f6;
+
+}
+
+
+body.dark #sideMenu ul li a:hover{
+
+    background:#374151;
+
+    color:#ff8c42;
+
+}
+
+
+body.dark .menu-divider{
+
+    background:#374151;
+
+}
+
+
+body.dark #menuOverlay{
+
+    background:rgba(0,0,0,.65);
+
+}
+
+
+/*==========================================================
+                    MENU ANIMATION
+==========================================================*/
+
+#sideMenu{
+
+    transition:
+
+        left .35s ease,
+
+        box-shadow .35s ease;
+
+}
+
+
+#sideMenu.active{
+
+    box-shadow:10px 0 35px rgba(0,0,0,.35);
+
+}
+
+
+#menuOverlay{
+
+    transition:opacity .3s ease;
+
+    opacity:0;
+
+}
+
+
+#menuOverlay.active{
+
+    opacity:1;
+
+}
+
+
+/*==========================================================
+                    ICON ANIMATION
+==========================================================*/
+
+#sideMenu ul li a i{
+
+    transition:
+
+        transform .25s,
+
+        color .25s;
+
+}
+
+
+#sideMenu ul li a:hover i{
+
+    transform:translateX(4px) scale(1.1);
+
+}
+
+
+/*==========================================================
+                    PROFILE EFFECT
+==========================================================*/
+
+.profile,
+
+.menu-avatar{
+
+    transition:.3s;
+
+}
+
+
+.profile:hover,
+
+.menu-avatar:hover{
+
+    transform:scale(1.08);
+
+}
+
+
+/*==========================================================
+                    BUTTON EFFECT
+==========================================================*/
+
+.menu-btn,
+
+.top-actions button{
+
+    transition:
+
+        transform .25s,
+
+        background .25s,
+
+        color .25s;
+
+}
+
+
+.menu-btn:active,
+
+.top-actions button:active{
+
+    transform:scale(.92);
+
+}
+
+
+/*==========================================================
+                    MOBILE
+==========================================================*/
+
+@media(max-width:768px){
+
+    .topbar{
+
+        padding:0 15px;
+
+        height:60px;
+
+    }
+
+    .logo{
+
+        font-size:20px;
+
+    }
+
+    .logo i{
+
+        font-size:22px;
+
+    }
+
+    #sideMenu{
+
+        width:260px;
+
+    }
+
+    .menu-header{
+
+        padding:28px 15px;
+
+    }
+
+    .menu-avatar{
+
+        width:75px;
+
+        height:75px;
+
+    }
+
+    #sideMenu ul li a{
+
+        padding:15px 20px;
+
+        font-size:15px;
+
+    }
+
+}
+
+
+/*==========================================================
+                    SMALL DEVICES
+==========================================================*/
+
+@media(max-width:480px){
+
+    .topbar{
+
+        height:56px;
+
+    }
+
+    .logo span{
+
+        font-size:18px;
+
+    }
+
+    .menu-btn{
+
+        font-size:20px;
+
+    }
+
+    #sideMenu{
+
+        width:240px;
+
+    }
+
+}
+/*==========================================================
+                    CafeSync POS
+                    menu.css
+                    PART 4
+            FINAL POLISH & UTILITIES
+==========================================================*/
+
+
+/*==========================================================
+                    PAGE CONTENT
+==========================================================*/
+
+.page-content{
+
+    margin-top:65px;
+
+    padding:25px;
+
+    min-height:calc(100vh - 65px);
+
+    background:#f5f7fb;
+
+    transition:.3s;
+
+}
+
+
+body.dark .page-content{
+
+    background:#111827;
+
+}
+
+
+/*==========================================================
+                    ACTIVE INDICATOR
+==========================================================*/
+
+#sideMenu ul li a.active{
+
+    position:relative;
+
+}
+
+#sideMenu ul li a.active::after{
+
+    content:"";
+
+    position:absolute;
+
+    right:18px;
+
+    top:50%;
+
+    width:8px;
+
+    height:8px;
+
+    border-radius:50%;
+
+    background:#fff;
+
+    transform:translateY(-50%);
+
+}
+
+
+/*==========================================================
+                NOTIFICATION BADGE
+==========================================================*/
+
+.badge{
+
+    margin-left:auto;
+
+    background:#ef4444;
+
+    color:#fff;
+
+    min-width:20px;
+
+    height:20px;
+
+    border-radius:20px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    font-size:11px;
+
+    font-weight:600;
+
+    padding:0 6px;
+
+}
+
+
+/*==========================================================
+                    TOOLTIP
+==========================================================*/
+
+[data-tooltip]{
+
+    position:relative;
+
+}
+
+[data-tooltip]:hover::after{
+
+    content:attr(data-tooltip);
+
+    position:absolute;
+
+    top:110%;
+
+    left:50%;
+
+    transform:translateX(-50%);
+
+    background:#222;
+
+    color:#fff;
+
+    padding:6px 10px;
+
+    border-radius:6px;
+
+    white-space:nowrap;
+
+    font-size:12px;
+
+    z-index:2000;
+
+}
+
+
+/*==========================================================
+                TRANSITIONS
+==========================================================*/
+
+*{
+
+    transition:
+
+        background .25s,
+
+        color .25s,
+
+        border-color .25s,
+
+        box-shadow .25s;
+
+}
+
+
+/*==========================================================
+                REMOVE LINK HIGHLIGHT
+==========================================================*/
+
+a{
+
+    -webkit-tap-highlight-color:transparent;
+
+}
+
+
+/*==========================================================
+                SCROLLBAR
+==========================================================*/
+
+::-webkit-scrollbar{
+
+    width:8px;
+
+}
+
+::-webkit-scrollbar-track{
+
+    background:#ececec;
+
+}
+
+::-webkit-scrollbar-thumb{
+
+    background:#ff6b00;
+
+    border-radius:20px;
+
+}
+
+::-webkit-scrollbar-thumb:hover{
+
+    background:#e55f00;
+
+}
+
+body.dark ::-webkit-scrollbar-track{
+
+    background:#1f2937;
+
+}
+
+
+/*==========================================================
+                TEXT SELECTION
+==========================================================*/
+
+::selection{
+
+    background:#ff6b00;
+
+    color:#fff;
+
+}
+
+
+/*==========================================================
+                FOCUS ACCESSIBILITY
+==========================================================*/
+
+button:focus,
+
+a:focus{
+
+    outline:2px solid #ff6b00;
+
+    outline-offset:2px;
+
+}
+
+
+/*==========================================================
+                PRINT
+==========================================================*/
+
+@media print{
+
+    .topbar,
+
+    #sideMenu,
+
+    #menuOverlay{
+
+        display:none !important;
+
+    }
+
+    .page-content{
+
+        margin:0;
+
+        padding:0;
+
+        background:#fff;
+
+    }
+
+}
+
+
+/*==========================================================
+                LARGE SCREENS
+==========================================================*/
+
+@media(min-width:1400px){
+
+    .page-content{
+
+        padding:35px;
+
+    }
+
+}

@@ -1,0 +1,2101 @@
+/*==========================================================
+                CafeSync POS
+                delivery.css
+                PART 1
+==========================================================*/
+
+/*==============================
+        GOOGLE FONT
+==============================*/
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+
+/*==============================
+        ROOT VARIABLES
+==============================*/
+
+:root{
+
+    --primary:#ff6b00;
+
+    --primary-dark:#e85f00;
+
+    --secondary:#2563eb;
+
+    --success:#16a34a;
+
+    --danger:#dc2626;
+
+    --warning:#f59e0b;
+
+    --light:#f5f7fb;
+
+    --white:#ffffff;
+
+    --text:#1f2937;
+
+    --border:#e5e7eb;
+
+    --shadow:0 8px 25px rgba(0,0,0,.08);
+
+    --radius:14px;
+
+}
+
+
+/*==============================
+        RESET
+==============================*/
+
+*{
+
+    margin:0;
+
+    padding:0;
+
+    box-sizing:border-box;
+
+    font-family:"Poppins",sans-serif;
+
+}
+
+html{
+
+    scroll-behavior:smooth;
+
+}
+
+body{
+
+    background:var(--light);
+
+    color:var(--text);
+
+    overflow-x:hidden;
+
+}
+
+
+/*==============================
+        SCROLLBAR
+==============================*/
+
+::-webkit-scrollbar{
+
+    width:8px;
+
+}
+
+::-webkit-scrollbar-track{
+
+    background:#ececec;
+
+}
+
+::-webkit-scrollbar-thumb{
+
+    background:var(--primary);
+
+    border-radius:50px;
+
+}
+
+
+/*==============================
+        SIDEBAR
+==============================*/
+
+#sidebar{
+
+    position:fixed;
+
+    left:0;
+
+    top:0;
+
+    width:260px;
+
+    height:100vh;
+
+    background:#111827;
+
+    color:#fff;
+
+    display:flex;
+
+    flex-direction:column;
+
+    box-shadow:var(--shadow);
+
+    z-index:1000;
+
+    transition:.3s;
+
+}
+
+#sidebar.collapsed{
+
+    width:80px;
+
+}
+
+
+/*==============================
+        LOGO
+==============================*/
+
+.logo{
+
+    height:80px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    gap:12px;
+
+    font-size:25px;
+
+    font-weight:700;
+
+    color:var(--primary);
+
+    border-bottom:1px solid rgba(255,255,255,.08);
+
+}
+
+.logo i{
+
+    font-size:34px;
+
+}
+
+#sidebar.collapsed .logo span{
+
+    display:none;
+
+}
+
+
+/*==============================
+        MENU
+==============================*/
+
+#sidebar nav{
+
+    flex:1;
+
+    overflow:auto;
+
+    padding:20px 12px;
+
+}
+
+#sidebar ul{
+
+    list-style:none;
+
+}
+
+#sidebar li{
+
+    margin-bottom:8px;
+
+}
+
+#sidebar li a{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:16px;
+
+    color:#d1d5db;
+
+    text-decoration:none;
+
+    padding:14px 18px;
+
+    border-radius:12px;
+
+    transition:.25s;
+
+    font-size:15px;
+
+}
+
+#sidebar li a:hover{
+
+    background:rgba(255,107,0,.18);
+
+    color:#fff;
+
+}
+
+#sidebar li.active a{
+
+    background:var(--primary);
+
+    color:#fff;
+
+}
+
+#sidebar.collapsed li a span{
+
+    display:none;
+
+}
+
+#sidebar.collapsed li a{
+
+    justify-content:center;
+
+}
+
+
+/*==============================
+        MAIN
+==============================*/
+
+.main{
+
+    margin-left:260px;
+
+    min-height:100vh;
+
+    transition:.3s;
+
+}
+
+.main.expand{
+
+    margin-left:80px;
+
+}
+
+
+/*==============================
+        TOPBAR
+==============================*/
+
+.topbar{
+
+    height:78px;
+
+    background:#fff;
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    padding:0 28px;
+
+    box-shadow:var(--shadow);
+
+    position:sticky;
+
+    top:0;
+
+    z-index:900;
+
+}
+
+.topbar .left{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:18px;
+
+}
+
+.topbar h2{
+
+    font-size:24px;
+
+    font-weight:700;
+
+}
+
+
+/*==============================
+        MENU BUTTON
+==============================*/
+
+#menuBtn{
+
+    width:46px;
+
+    height:46px;
+
+    border:none;
+
+    border-radius:12px;
+
+    cursor:pointer;
+
+    background:var(--primary);
+
+    color:#fff;
+
+    font-size:19px;
+
+    transition:.3s;
+
+}
+
+#menuBtn:hover{
+
+    background:var(--primary-dark);
+
+    transform:scale(1.05);
+
+}
+
+
+/*==============================
+        RIGHT AREA
+==============================*/
+
+.topbar .right{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:16px;
+
+}
+
+#themeBtn,
+
+.notify{
+
+    width:46px;
+
+    height:46px;
+
+    border:none;
+
+    border-radius:12px;
+
+    background:#f3f4f6;
+
+    cursor:pointer;
+
+    position:relative;
+
+    transition:.3s;
+
+    font-size:18px;
+
+}
+
+#themeBtn:hover,
+
+.notify:hover{
+
+    background:var(--primary);
+
+    color:#fff;
+
+}
+
+
+/*==============================
+        NOTIFICATION BADGE
+==============================*/
+
+.notify span{
+
+    position:absolute;
+
+    top:-4px;
+
+    right:-4px;
+
+    background:red;
+
+    color:#fff;
+
+    width:20px;
+
+    height:20px;
+
+    border-radius:50%;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    font-size:11px;
+
+    font-weight:700;
+
+}
+
+
+/*==============================
+        PROFILE
+==============================*/
+
+.profile{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:12px;
+
+    background:#fff;
+
+    padding:8px 14px;
+
+    border-radius:50px;
+
+    box-shadow:var(--shadow);
+
+}
+
+.profile img{
+
+    width:46px;
+
+    height:46px;
+
+    border-radius:50%;
+
+    object-fit:cover;
+
+}
+
+.profile h4{
+
+    font-size:15px;
+
+}
+
+.profile small{
+
+    color:#6b7280;
+
+}
+
+
+/*==============================
+        DARK MODE
+==============================*/
+
+body.dark{
+
+    background:#0f172a;
+
+    color:#f1f5f9;
+
+}
+
+body.dark .topbar{
+
+    background:#1e293b;
+
+}
+
+body.dark .profile{
+
+    background:#1e293b;
+
+}
+
+body.dark #themeBtn,
+
+body.dark .notify{
+
+    background:#334155;
+
+    color:#fff;
+
+}
+
+body.dark #sidebar{
+
+    background:#020617;
+
+}
+/*==========================================================
+                CafeSync POS
+                delivery.css
+                PART 2
+==========================================================*/
+
+
+/*==============================
+        STATISTICS SECTION
+==============================*/
+
+.stats{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+
+    gap:20px;
+
+    padding:30px;
+
+}
+
+.card{
+
+    background:#fff;
+
+    border-radius:18px;
+
+    padding:25px;
+
+    box-shadow:var(--shadow);
+
+    transition:.35s;
+
+    position:relative;
+
+    overflow:hidden;
+
+}
+
+.card::before{
+
+    content:"";
+
+    position:absolute;
+
+    left:0;
+
+    top:0;
+
+    width:6px;
+
+    height:100%;
+
+    background:var(--primary);
+
+}
+
+.card:hover{
+
+    transform:translateY(-8px);
+
+}
+
+.card i{
+
+    width:60px;
+
+    height:60px;
+
+    border-radius:50%;
+
+    background:rgba(255,107,0,.12);
+
+    color:var(--primary);
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    font-size:26px;
+
+    margin-bottom:18px;
+
+}
+
+.card h3{
+
+    font-size:30px;
+
+    font-weight:700;
+
+    margin-bottom:8px;
+
+}
+
+.card p{
+
+    color:#6b7280;
+
+    font-size:15px;
+
+}
+
+
+/*==============================
+        TOOLBAR
+==============================*/
+
+.toolbar{
+
+    display:flex;
+
+    gap:15px;
+
+    padding:0 30px 30px;
+
+    flex-wrap:wrap;
+
+    align-items:center;
+
+}
+
+.toolbar input{
+
+    flex:1;
+
+    min-width:260px;
+
+    height:50px;
+
+    border:1px solid var(--border);
+
+    border-radius:12px;
+
+    padding:0 18px;
+
+    outline:none;
+
+    font-size:15px;
+
+    transition:.3s;
+
+}
+
+.toolbar input:focus{
+
+    border-color:var(--primary);
+
+}
+
+.toolbar select{
+
+    min-width:180px;
+
+    height:50px;
+
+    border:1px solid var(--border);
+
+    border-radius:12px;
+
+    padding:0 12px;
+
+    cursor:pointer;
+
+    background:#fff;
+
+    outline:none;
+
+    font-size:15px;
+
+}
+
+.toolbar button{
+
+    height:50px;
+
+    padding:0 24px;
+
+    border:none;
+
+    border-radius:12px;
+
+    background:var(--primary);
+
+    color:#fff;
+
+    cursor:pointer;
+
+    font-weight:600;
+
+    transition:.3s;
+
+}
+
+.toolbar button:hover{
+
+    background:var(--primary-dark);
+
+}
+
+
+/*==============================
+        PLATFORM TABS
+==============================*/
+
+.platformTabs{
+
+    display:flex;
+
+    gap:18px;
+
+    padding:0 30px 30px;
+
+    flex-wrap:wrap;
+
+}
+
+.platformTabs .tab{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:10px;
+
+    border:none;
+
+    background:#fff;
+
+    padding:14px 22px;
+
+    border-radius:14px;
+
+    cursor:pointer;
+
+    box-shadow:var(--shadow);
+
+    transition:.3s;
+
+    font-weight:600;
+
+}
+
+.platformTabs .tab img{
+
+    width:28px;
+
+    height:28px;
+
+    object-fit:contain;
+
+}
+
+.platformTabs .tab i{
+
+    font-size:20px;
+
+    color:var(--primary);
+
+}
+
+.platformTabs .tab:hover{
+
+    transform:translateY(-4px);
+
+}
+
+.platformTabs .active{
+
+    background:var(--primary);
+
+    color:#fff;
+
+}
+
+.platformTabs .active i{
+
+    color:#fff;
+
+}
+
+
+/*==============================
+        DARK MODE SUPPORT
+==============================*/
+
+body.dark .card{
+
+    background:#1e293b;
+
+}
+
+body.dark .toolbar input,
+
+body.dark .toolbar select{
+
+    background:#1e293b;
+
+    border-color:#334155;
+
+    color:#fff;
+
+}
+
+body.dark .platformTabs .tab{
+
+    background:#1e293b;
+
+    color:#fff;
+
+}
+
+
+/*==============================
+        RESPONSIVE
+==============================*/
+
+@media(max-width:900px){
+
+.stats{
+
+    grid-template-columns:repeat(2,1fr);
+
+}
+
+.toolbar{
+
+    flex-direction:column;
+
+    align-items:stretch;
+
+}
+
+.toolbar input,
+
+.toolbar select,
+
+.toolbar button{
+
+    width:100%;
+
+}
+
+.platformTabs{
+
+    justify-content:center;
+
+}
+
+}
+
+@media(max-width:600px){
+
+.stats{
+
+    grid-template-columns:1fr;
+
+}
+
+.platformTabs{
+
+    flex-direction:column;
+
+}
+
+.platformTabs .tab{
+
+    width:100%;
+
+    justify-content:center;
+
+}
+
+}
+/*==========================================================
+                CafeSync POS
+                delivery.css
+                PART 3
+        ORDER BOARD & ORDER CARDS
+==========================================================*/
+
+
+/*==================================
+        ORDER BOARD
+==================================*/
+
+.orders-board{
+
+    display:grid;
+
+    grid-template-columns:repeat(5,1fr);
+
+    gap:20px;
+
+    padding:30px;
+
+    align-items:flex-start;
+
+}
+
+
+/*==================================
+        COLUMN
+==================================*/
+
+.order-column{
+
+    background:#ffffff;
+
+    border-radius:18px;
+
+    box-shadow:var(--shadow);
+
+    min-height:650px;
+
+    overflow:hidden;
+
+    display:flex;
+
+    flex-direction:column;
+
+}
+
+
+/*==================================
+        COLUMN HEADER
+==================================*/
+
+.column-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    padding:18px 20px;
+
+    color:#fff;
+
+    font-weight:600;
+
+}
+
+.column-header h3{
+
+    font-size:17px;
+
+    font-weight:600;
+
+}
+
+.column-header span{
+
+    width:34px;
+
+    height:34px;
+
+    border-radius:50%;
+
+    background:rgba(255,255,255,.25);
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    font-size:14px;
+
+}
+
+
+/*==================================
+        STATUS COLORS
+==================================*/
+
+.pending{
+
+    background:#f59e0b;
+
+}
+
+.preparing{
+
+    background:#2563eb;
+
+}
+
+.ready{
+
+    background:#16a34a;
+
+}
+
+.delivery{
+
+    background:#8b5cf6;
+
+}
+
+.delivered{
+
+    background:#10b981;
+
+}
+
+
+/*==================================
+        ORDER LIST
+==================================*/
+
+.order-list{
+
+    flex:1;
+
+    padding:15px;
+
+    overflow-y:auto;
+
+}
+
+
+/*==================================
+        ORDER CARD
+==================================*/
+
+.order-card{
+
+    background:#fff;
+
+    border-radius:14px;
+
+    border:1px solid var(--border);
+
+    padding:18px;
+
+    margin-bottom:18px;
+
+    transition:.3s;
+
+    cursor:pointer;
+
+}
+
+.order-card:hover{
+
+    transform:translateY(-5px);
+
+    box-shadow:0 12px 28px rgba(0,0,0,.12);
+
+}
+
+
+/*==================================
+        CARD HEADER
+==================================*/
+
+.order-top{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:flex-start;
+
+    margin-bottom:12px;
+
+}
+
+.order-id{
+
+    font-size:20px;
+
+    font-weight:700;
+
+}
+
+.platform{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    margin-top:5px;
+
+    font-size:14px;
+
+    color:#6b7280;
+
+}
+
+.platform img{
+
+    width:22px;
+
+    height:22px;
+
+}
+
+
+/*==================================
+        PAYMENT BADGE
+==================================*/
+
+.payment{
+
+    padding:6px 14px;
+
+    border-radius:50px;
+
+    font-size:13px;
+
+    font-weight:600;
+
+}
+
+.paid{
+
+    background:#dcfce7;
+
+    color:#15803d;
+
+}
+
+.pending-payment{
+
+    background:#fee2e2;
+
+    color:#dc2626;
+
+}
+
+
+/*==================================
+        CUSTOMER DETAILS
+==================================*/
+
+.customer,
+
+.phone,
+
+.address,
+
+.time{
+
+    display:flex;
+
+    gap:10px;
+
+    align-items:center;
+
+    margin-top:10px;
+
+    font-size:14px;
+
+}
+
+.customer i,
+
+.phone i,
+
+.address i,
+
+.time i{
+
+    color:var(--primary);
+
+    width:20px;
+
+}
+
+
+/*==================================
+        ITEMS
+==================================*/
+
+.items{
+
+    margin-top:15px;
+
+    padding:12px;
+
+    border-radius:10px;
+
+    background:#f8fafc;
+
+}
+
+.items ul{
+
+    list-style:none;
+
+}
+
+.items li{
+
+    padding:5px 0;
+
+    font-size:14px;
+
+}
+
+
+/*==================================
+        PRICE
+==================================*/
+
+.amount{
+
+    margin-top:15px;
+
+    text-align:right;
+
+}
+
+.amount h2{
+
+    color:var(--primary);
+
+    font-size:28px;
+
+}
+
+
+/*==================================
+        ACTION BUTTONS
+==================================*/
+
+.actions{
+
+    display:flex;
+
+    gap:10px;
+
+    margin-top:18px;
+
+    flex-wrap:wrap;
+
+}
+
+.actions button{
+
+    flex:1;
+
+    border:none;
+
+    cursor:pointer;
+
+    padding:10px;
+
+    border-radius:10px;
+
+    color:#fff;
+
+    font-weight:600;
+
+    transition:.3s;
+
+}
+
+.accept-btn{
+
+    background:#16a34a;
+
+}
+
+.reject-btn{
+
+    background:#dc2626;
+
+}
+
+.details-btn{
+
+    background:#2563eb;
+
+}
+
+.actions button:hover{
+
+    transform:scale(1.04);
+
+}
+
+
+/*==================================
+        PRIORITY BORDER
+==================================*/
+
+.high-priority{
+
+    border-left:6px solid #ef4444;
+
+}
+
+.medium-priority{
+
+    border-left:6px solid #f59e0b;
+
+}
+
+.low-priority{
+
+    border-left:6px solid #22c55e;
+
+}
+
+
+/*==================================
+        DARK MODE
+==================================*/
+
+body.dark .order-column{
+
+    background:#1e293b;
+
+}
+
+body.dark .order-card{
+
+    background:#0f172a;
+
+    border:1px solid #334155;
+
+    color:#fff;
+
+}
+
+body.dark .items{
+
+    background:#1e293b;
+
+}
+
+body.dark .platform{
+
+    color:#cbd5e1;
+
+}
+
+
+/*==================================
+        RESPONSIVE
+==================================*/
+
+@media(max-width:1600px){
+
+.orders-board{
+
+    grid-template-columns:repeat(3,1fr);
+
+}
+
+}
+
+@media(max-width:1100px){
+
+.orders-board{
+
+    grid-template-columns:repeat(2,1fr);
+
+}
+
+}
+
+@media(max-width:700px){
+
+.orders-board{
+
+    grid-template-columns:1fr;
+
+}
+
+.order-column{
+
+    min-height:auto;
+
+}
+
+.actions{
+
+    flex-direction:column;
+
+}
+
+}
+/*==========================================================
+                CafeSync POS
+                delivery.css
+                PART 4
+        MODAL • RIDERS • MAP • NOTIFICATIONS
+==========================================================*/
+
+
+/*==================================
+        ORDER DETAILS MODAL
+==================================*/
+
+.modal{
+
+    display:none;
+
+    position:fixed;
+
+    inset:0;
+
+    background:rgba(0,0,0,.55);
+
+    z-index:5000;
+
+    justify-content:center;
+
+    align-items:center;
+
+    padding:30px;
+
+    overflow:auto;
+
+}
+
+.modal.show{
+
+    display:flex;
+
+}
+
+.modal-content{
+
+    width:100%;
+
+    max-width:1200px;
+
+    background:#fff;
+
+    border-radius:18px;
+
+    overflow:hidden;
+
+    box-shadow:0 25px 60px rgba(0,0,0,.30);
+
+}
+
+.modal-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    padding:22px 28px;
+
+    background:var(--primary);
+
+    color:#fff;
+
+}
+
+.modal-header h2{
+
+    font-size:24px;
+
+}
+
+.modal-header button{
+
+    width:42px;
+
+    height:42px;
+
+    border:none;
+
+    border-radius:50%;
+
+    cursor:pointer;
+
+    background:#fff;
+
+    color:var(--primary);
+
+    font-size:18px;
+
+}
+
+.modal-body{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:25px;
+
+    padding:25px;
+
+}
+
+.modal-left,
+.modal-right{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:20px;
+
+}
+
+.info-card,
+.bill-card,
+.bill-summary{
+
+    background:#f8fafc;
+
+    border-radius:14px;
+
+    padding:18px;
+
+    border:1px solid var(--border);
+
+}
+
+.info-card h3,
+.bill-card h3,
+.bill-summary h3{
+
+    margin-bottom:15px;
+
+    color:var(--primary);
+
+}
+
+.info-card p{
+
+    margin:10px 0;
+
+    line-height:1.7;
+
+}
+
+
+/*==================================
+        BILL TABLE
+==================================*/
+
+.bill-card table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+}
+
+.bill-card th{
+
+    background:#f3f4f6;
+
+    padding:12px;
+
+    text-align:left;
+
+}
+
+.bill-card td{
+
+    padding:12px;
+
+    border-bottom:1px solid #ececec;
+
+}
+
+.summary-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    margin:12px 0;
+
+}
+
+.total{
+
+    font-size:20px;
+
+    font-weight:700;
+
+    color:var(--primary);
+
+}
+
+
+/*==================================
+        MODAL FOOTER
+==================================*/
+
+.modal-footer{
+
+    display:flex;
+
+    flex-wrap:wrap;
+
+    gap:12px;
+
+    padding:20px 25px;
+
+    background:#fafafa;
+
+}
+
+.modal-footer button{
+
+    flex:1;
+
+    min-width:150px;
+
+    border:none;
+
+    cursor:pointer;
+
+    padding:13px;
+
+    border-radius:12px;
+
+    color:#fff;
+
+    font-weight:600;
+
+    transition:.3s;
+
+}
+
+#acceptOrder{background:#16a34a;}
+#prepareOrder{background:#2563eb;}
+#readyOrder{background:#8b5cf6;}
+#assignRider{background:#f59e0b;}
+#printInvoice{background:#0ea5e9;}
+#cancelOrder{background:#dc2626;}
+
+.modal-footer button:hover{
+
+    transform:translateY(-3px);
+
+}
+
+
+/*==================================
+        RIDER PANEL
+==================================*/
+
+.rider-panel{
+
+    padding:30px;
+
+}
+
+.panel-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:20px;
+
+}
+
+.panel-header h2{
+
+    font-size:24px;
+
+}
+
+.panel-header button{
+
+    background:var(--primary);
+
+    color:#fff;
+
+    border:none;
+
+    padding:10px 18px;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+}
+
+.riders-grid{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+
+    gap:20px;
+
+}
+
+.rider-card{
+
+    background:#fff;
+
+    border-radius:15px;
+
+    padding:20px;
+
+    box-shadow:var(--shadow);
+
+}
+
+.rider-top{
+
+    display:flex;
+
+    gap:15px;
+
+    align-items:center;
+
+}
+
+.rider-top img{
+
+    width:70px;
+
+    height:70px;
+
+    border-radius:50%;
+
+    object-fit:cover;
+
+}
+
+.rider-status{
+
+    margin:15px 0;
+
+    padding:8px 15px;
+
+    border-radius:30px;
+
+    width:max-content;
+
+    color:#fff;
+
+    font-weight:600;
+
+}
+
+.online{
+
+    background:#16a34a;
+
+}
+
+.busy{
+
+    background:#dc2626;
+
+}
+
+.assign-btn{
+
+    width:100%;
+
+    border:none;
+
+    background:var(--primary);
+
+    color:#fff;
+
+    padding:12px;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+}
+
+
+/*==================================
+        GOOGLE MAP
+==================================*/
+
+.map-section{
+
+    padding:30px;
+
+}
+
+#deliveryMap{
+
+    border-radius:15px;
+
+    overflow:hidden;
+
+    box-shadow:var(--shadow);
+
+}
+
+
+/*==================================
+        CUSTOMER CONTACT
+==================================*/
+
+.customer-contact{
+
+    padding:30px;
+
+}
+
+.contact-card{
+
+    background:#fff;
+
+    border-radius:15px;
+
+    padding:25px;
+
+    display:flex;
+
+    flex-wrap:wrap;
+
+    gap:15px;
+
+    align-items:center;
+
+    box-shadow:var(--shadow);
+
+}
+
+.contact-card button{
+
+    background:var(--secondary);
+
+    color:#fff;
+
+    border:none;
+
+    padding:12px 18px;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+}
+
+
+/*==================================
+        DELIVERY NOTES
+==================================*/
+
+.notes-section{
+
+    padding:30px;
+
+}
+
+.notes-section textarea{
+
+    width:100%;
+
+    height:150px;
+
+    resize:none;
+
+    border-radius:14px;
+
+    border:1px solid var(--border);
+
+    padding:18px;
+
+    font-size:15px;
+
+}
+
+
+/*==================================
+        NOTIFICATIONS
+==================================*/
+
+#notificationPanel{
+
+    padding:30px;
+
+}
+
+.notify-item{
+
+    display:flex;
+
+    gap:15px;
+
+    align-items:center;
+
+    background:#fff;
+
+    padding:18px;
+
+    margin-bottom:15px;
+
+    border-radius:12px;
+
+    box-shadow:var(--shadow);
+
+}
+
+.notify-item i{
+
+    font-size:24px;
+
+}
+
+.notify-item.new i{
+
+    color:#2563eb;
+
+}
+
+.notify-item.success i{
+
+    color:#16a34a;
+
+}
+
+.notify-item.warning i{
+
+    color:#f59e0b;
+
+}
+
+
+/*==================================
+        TIMER BOARD
+==================================*/
+
+.timer-board{
+
+    display:grid;
+
+    grid-template-columns:repeat(3,1fr);
+
+    gap:20px;
+
+    padding:30px;
+
+}
+
+.timer-card{
+
+    border-radius:15px;
+
+    color:#fff;
+
+    text-align:center;
+
+    padding:30px;
+
+    box-shadow:var(--shadow);
+
+}
+
+.timer-card h1{
+
+    margin-top:10px;
+
+    font-size:42px;
+
+}
+
+.green{
+
+    background:#16a34a;
+
+}
+
+.orange{
+
+    background:#f59e0b;
+
+}
+
+.red{
+
+    background:#dc2626;
+
+}
+
+
+/*==================================
+        DARK MODE
+==================================*/
+
+body.dark .modal-content,
+body.dark .rider-card,
+body.dark .contact-card,
+body.dark .notify-item{
+
+    background:#1e293b;
+
+    color:#fff;
+
+}
+
+body.dark .info-card,
+body.dark .bill-card,
+body.dark .bill-summary{
+
+    background:#0f172a;
+
+    border-color:#334155;
+
+}
+
+body.dark .notes-section textarea{
+
+    background:#1e293b;
+
+    color:#fff;
+
+    border-color:#334155;
+
+}
+
+
+/*==================================
+        RESPONSIVE
+==================================*/
+
+@media(max-width:1000px){
+
+.modal-body{
+
+    grid-template-columns:1fr;
+
+}
+
+.timer-board{
+
+    grid-template-columns:1fr;
+
+}
+
+}
+
+@media(max-width:768px){
+
+.modal-footer{
+
+    flex-direction:column;
+
+}
+
+.contact-card{
+
+    flex-direction:column;
+
+    align-items:stretch;
+
+}
+
+}

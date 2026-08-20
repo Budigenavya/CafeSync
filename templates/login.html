@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>CafeSync | Login</title>
+
+    <!-- Google Fonts -->
+
+    <link rel="preconnect"
+          href="https://fonts.googleapis.com">
+
+    <link rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet">
+
+    <!-- Font Awesome -->
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+    <!-- Login CSS -->
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/login.css') }}">
+
+</head>
+
+<body>
+
+<!-- ==========================================================
+                    BACKGROUND
+=========================================================== -->
+
+<div class="background">
+
+    <div class="overlay"></div>
+
+</div>
+
+
+<!-- ==========================================================
+                    TOP NAVBAR
+=========================================================== -->
+
+<header class="topbar">
+
+    <div class="logo">
+
+        <i class="fas fa-mug-hot"></i>
+
+        <span>CafeSync POS</span>
+
+    </div>
+
+    <button id="themeBtn"
+            class="theme-btn">
+
+        <i class="fas fa-moon"></i>
+
+    </button>
+
+</header>
+
+
+<!-- ==========================================================
+                    LOGIN CONTAINER
+=========================================================== -->
+
+<div class="login-container">
+
+
+    <!-- ===========================================
+                LEFT SIDE
+    ============================================ -->
+
+    <div class="login-left">
+
+        <div class="welcome">
+
+            <h1>
+
+                Welcome to
+
+                <span>CafeSync</span>
+
+            </h1>
+
+            <p>
+
+                Smart Cafe Billing &
+                Management System
+
+            </p>
+
+        </div>
+
+        <div class="features">
+
+            <div class="feature">
+
+                <i class="fas fa-cash-register"></i>
+
+                <span>Fast POS Billing</span>
+
+            </div>
+
+            <div class="feature">
+
+                <i class="fas fa-chart-line"></i>
+
+                <span>Sales Analytics</span>
+
+            </div>
+
+            <div class="feature">
+
+                <i class="fas fa-box-open"></i>
+
+                <span>Inventory Tracking</span>
+
+            </div>
+
+            <div class="feature">
+
+                <i class="fas fa-motorcycle"></i>
+
+                <span>Delivery Integration</span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ===========================================
+                RIGHT SIDE
+                (Login Form)
+    ============================================ -->
+
+    <div class="login-right">
+        <!-- ===========================================
+                    LOGIN CARD
+        ============================================ -->
+
+        <div class="login-card">
+
+            <div class="login-header">
+
+                <h2>Sign In</h2>
+
+                <p>
+
+                    Login to continue to your
+                    CafeSync Dashboard
+
+                </p>
+
+            </div>
+
+            <!-- Login Form -->
+
+            <form id="loginForm">
+
+                <!-- Username -->
+
+                <div class="input-group">
+
+                    <label>
+
+                        Username / Email
+
+                    </label>
+
+                    <div class="input-box">
+
+                        <i class="fas fa-user"></i>
+
+                        <input
+
+                            type="text"
+
+                            id="username"
+
+                            placeholder="Enter username"
+
+                            required
+
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <!-- Password -->
+
+                <div class="input-group">
+
+                    <label>
+
+                        Password
+
+                    </label>
+
+                    <div class="input-box">
+
+                        <i class="fas fa-lock"></i>
+
+                        <input
+
+                            type="password"
+
+                            id="password"
+
+                            placeholder="Enter password"
+
+                            required
+
+                        >
+
+                        <button
+
+                            type="button"
+
+                            id="togglePassword"
+
+                            class="eye-btn"
+
+                        >
+
+                            <i class="fas fa-eye"></i>
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <!-- Remember -->
+
+                <div class="login-options">
+
+                    <label class="remember">
+
+                        <input
+
+                            type="checkbox"
+
+                            id="remember"
+
+                        >
+
+                        Remember Me
+
+                    </label>
+
+                    <a
+
+                        href="#"
+
+                        id="forgotPassword"
+
+                    >
+
+                        Forgot Password?
+
+                    </a>
+
+                </div>
+
+
+                <!-- Login -->
+
+                <button
+
+                    type="submit"
+
+                    class="login-btn"
+
+                >
+
+                    <i class="fas fa-right-to-bracket"></i>
+
+                    Login
+
+                </button>
+
+            </form>
+
+
+            <!-- Divider -->
+
+            <div class="divider">
+
+                <span>OR</span>
+
+            </div>
+
+
+            <!-- Social Login -->
+
+            <div class="social-login">
+
+                <button
+                    class="google-btn">
+
+                    <i class="fab fa-google"></i>
+
+                    Continue with Google
+
+                </button>
+
+                <button
+                    class="microsoft-btn">
+
+                    <i class="fab fa-microsoft"></i>
+
+                    Continue with Microsoft
+
+                </button>
+
+            </div>
+
+
+            <!-- Footer -->
+
+            <div class="login-footer">
+
+                <p>
+
+                    © 2026 CafeSync POS
+
+                </p>
+
+                <small>
+
+                    Smart Cafe Billing &
+                    Management System
+
+                </small>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================================
+                LOADING SCREEN
+=========================================================== -->
+
+<div
+
+    id="loadingScreen"
+
+    class="loading-screen"
+
+>
+
+    <div class="loader"></div>
+
+    <p>
+
+        Signing In...
+
+    </p>
+
+</div>
+
+
+<!-- ==========================================================
+                JAVASCRIPT
+=========================================================== -->
+
+<script
+src="{{ url_for('static', filename='js/login.js') }}">
+</script>
+
+</body>
+
+</html>

@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>CafeSync | Settings</title>
+
+    <!-- Google Fonts -->
+
+    <link rel="preconnect"
+          href="https://fonts.googleapis.com">
+
+    <link rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet">
+
+    <!-- Font Awesome -->
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+    <!-- Main CSS -->
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+</head>
+
+<body>
+
+<!-- =====================================
+                SIDEBAR
+===================================== -->
+
+<div class="sidebar">
+
+    <div class="logo">
+
+        <div class="logo-icon">
+
+            <i class="fa-solid fa-mug-hot"></i>
+
+        </div>
+
+        <div>
+
+            <h2>CafeSync</h2>
+
+            <span>Cafe POS</span>
+
+        </div>
+
+    </div>
+
+    <ul class="menu">
+
+        <li>
+
+            <a href="/dashboard">
+
+                <i class="fa-solid fa-chart-line"></i>
+
+                Dashboard
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/billing">
+
+                <i class="fa-solid fa-cash-register"></i>
+
+                Billing
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/inventory">
+
+                <i class="fa-solid fa-boxes-stacked"></i>
+
+                Inventory
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/kitchen">
+
+                <i class="fa-solid fa-utensils"></i>
+
+                Kitchen
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/reports">
+
+                <i class="fa-solid fa-chart-pie"></i>
+
+                Reports
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/employees">
+
+                <i class="fa-solid fa-users"></i>
+
+                Employees
+
+            </a>
+
+        </li>
+
+        <li class="active">
+
+            <a href="/settings">
+
+                <i class="fa-solid fa-gear"></i>
+
+                Settings
+
+            </a>
+
+        </li>
+
+    </ul>
+
+</div>
+
+<!-- =====================================
+              MAIN CONTENT
+===================================== -->
+
+<div class="main">
+
+    <!-- Top Bar -->
+
+    <div class="topbar">
+
+        <div class="left">
+
+            <h1>
+
+                Settings
+
+            </h1>
+
+        </div>
+
+        <div class="right">
+
+            <div class="search">
+
+                <i class="fa-solid fa-magnifying-glass"></i>
+
+                <input
+                    type="text"
+                    id="settingsSearch"
+                    placeholder="Search settings...">
+
+            </div>
+
+            <button
+                id="refreshSettings"
+                class="icon-btn">
+
+                <i class="fa-solid fa-rotate"></i>
+
+            </button>
+
+        </div>
+
+    </div>
+
+    <!-- Page Header -->
+
+    <div class="page-header">
+
+        <div>
+
+            <h2>
+
+                System Settings
+
+            </h2>
+
+            <p>
+
+                Configure your cafe information, billing, users, security, and application preferences.
+
+            </p>
+
+        </div>
+
+    </div>
+
+    <!-- Quick Setting Cards -->
+
+    <div class="stats-grid">
+
+        <div class="stat-card">
+
+            <i class="fa-solid fa-store"></i>
+
+            <h3>
+
+                Cafe
+
+            </h3>
+
+            <span>
+
+                Business Information
+
+            </span>
+
+        </div>
+
+        <div class="stat-card">
+
+            <i class="fa-solid fa-file-invoice-dollar"></i>
+
+            <h3>
+
+                Billing
+
+            </h3>
+
+            <span>
+
+                GST & Receipt
+
+            </span>
+
+        </div>
+
+        <div class="stat-card">
+
+            <i class="fa-solid fa-user-shield"></i>
+
+            <h3>
+
+                Security
+
+            </h3>
+
+            <span>
+
+                Users & Password
+
+            </span>
+
+        </div>
+
+        <div class="stat-card">
+
+            <i class="fa-solid fa-database"></i>
+
+            <h3>
+
+                Backup
+
+            </h3>
+
+            <span>
+
+                Restore Database
+
+            </span>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            PART B STARTS HERE
+    ===================================== -->
+    <!-- =====================================
+            CAFE INFORMATION
+    ===================================== -->
+
+    <div class="card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fa-solid fa-store"></i>
+
+                Cafe Information
+
+            </h3>
+
+        </div>
+
+        <div class="form-grid">
+
+            <!-- Cafe Name -->
+
+            <div class="form-group">
+
+                <label>Cafe Name</label>
+
+                <input
+                    type="text"
+                    id="cafeName"
+                    placeholder="Enter cafe name">
+
+            </div>
+
+            <!-- Owner Name -->
+
+            <div class="form-group">
+
+                <label>Owner Name</label>
+
+                <input
+                    type="text"
+                    id="ownerName"
+                    placeholder="Enter owner name">
+
+            </div>
+
+            <!-- Phone -->
+
+            <div class="form-group">
+
+                <label>Phone Number</label>
+
+                <input
+                    type="tel"
+                    id="cafePhone"
+                    placeholder="+91 9876543210">
+
+            </div>
+
+            <!-- Email -->
+
+            <div class="form-group">
+
+                <label>Email Address</label>
+
+                <input
+                    type="email"
+                    id="cafeEmail"
+                    placeholder="cafe@example.com">
+
+            </div>
+
+            <!-- Website -->
+
+            <div class="form-group">
+
+                <label>Website</label>
+
+                <input
+                    type="url"
+                    id="cafeWebsite"
+                    placeholder="https://example.com">
+
+            </div>
+
+            <!-- GST Number -->
+
+            <div class="form-group">
+
+                <label>GST Number</label>
+
+                <input
+                    type="text"
+                    id="gstNumber"
+                    placeholder="Enter GST Number">
+
+            </div>
+
+            <!-- Address -->
+
+            <div class="form-group full-width">
+
+                <label>Business Address</label>
+
+                <textarea
+                    id="cafeAddress"
+                    rows="4"
+                    placeholder="Enter complete address"></textarea>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            LOGO & BUSINESS HOURS
+    ===================================== -->
+
+    <div class="reports-grid">
+
+        <!-- Logo Upload -->
+
+        <div class="card">
+
+            <div class="card-header">
+
+                <h3>
+
+                    <i class="fa-solid fa-image"></i>
+
+                    Cafe Logo
+
+                </h3>
+
+            </div>
+
+            <div class="logo-upload">
+
+                <img
+                    id="logoPreview"
+                    src="/static/images/logo.png"
+                    alt="Cafe Logo"
+                    class="logo-preview">
+
+                <br><br>
+
+                <input
+                    type="file"
+                    id="logoUpload"
+                    accept="image/*">
+
+            </div>
+
+        </div>
+
+        <!-- Business Hours -->
+
+        <div class="card">
+
+            <div class="card-header">
+
+                <h3>
+
+                    <i class="fa-solid fa-clock"></i>
+
+                    Business Hours
+
+                </h3>
+
+            </div>
+
+            <div class="form-grid">
+
+                <div class="form-group">
+
+                    <label>Opening Time</label>
+
+                    <input
+                        type="time"
+                        id="openingTime">
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Closing Time</label>
+
+                    <input
+                        type="time"
+                        id="closingTime">
+
+                </div>
+
+                <div class="form-group full-width">
+
+                    <label>Working Days</label>
+
+                    <select id="workingDays">
+
+                        <option>Monday - Sunday</option>
+                        <option>Monday - Saturday</option>
+                        <option>Monday - Friday</option>
+
+                    </select>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            SOCIAL MEDIA
+    ===================================== -->
+
+    <div class="card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fa-solid fa-share-nodes"></i>
+
+                Social Media Links
+
+            </h3>
+
+        </div>
+
+        <div class="form-grid">
+
+            <div class="form-group">
+
+                <label>Facebook</label>
+
+                <input
+                    type="url"
+                    id="facebookLink">
+
+            </div>
+
+            <div class="form-group">
+
+                <label>Instagram</label>
+
+                <input
+                    type="url"
+                    id="instagramLink">
+
+            </div>
+
+            <div class="form-group">
+
+                <label>X (Twitter)</label>
+
+                <input
+                    type="url"
+                    id="twitterLink">
+
+            </div>
+
+            <div class="form-group">
+
+                <label>WhatsApp</label>
+
+                <input
+                    type="text"
+                    id="whatsappNumber">
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            PART C STARTS HERE
+    ===================================== -->
+    <!-- =====================================
+            BILLING SETTINGS
+    ===================================== -->
+
+    <div class="card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fa-solid fa-file-invoice-dollar"></i>
+
+                Billing Settings
+
+            </h3>
+
+        </div>
+
+        <div class="form-grid">
+
+            <!-- GST Percentage -->
+
+            <div class="form-group">
+
+                <label>GST Percentage (%)</label>
+
+                <input
+                    type="number"
+                    id="gstPercentage"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="18">
+
+            </div>
+
+            <!-- Service Charge -->
+
+            <div class="form-group">
+
+                <label>Service Charge (%)</label>
+
+                <input
+                    type="number"
+                    id="serviceCharge"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="5">
+
+            </div>
+
+            <!-- Currency -->
+
+            <div class="form-group">
+
+                <label>Currency</label>
+
+                <select id="currency">
+
+                    <option value="INR">Indian Rupee (₹)</option>
+                    <option value="USD">US Dollar ($)</option>
+                    <option value="EUR">Euro (€)</option>
+                    <option value="GBP">British Pound (£)</option>
+
+                </select>
+
+            </div>
+
+            <!-- Decimal Places -->
+
+            <div class="form-group">
+
+                <label>Decimal Places</label>
+
+                <select id="decimalPlaces">
+
+                    <option value="0">0</option>
+                    <option value="2" selected>2</option>
+                    <option value="3">3</option>
+
+                </select>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            DISCOUNT SETTINGS
+    ===================================== -->
+
+    <div class="card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fa-solid fa-tags"></i>
+
+                Discount Settings
+
+            </h3>
+
+        </div>
+
+        <div class="form-grid">
+
+            <div class="form-group">
+
+                <label>Default Discount (%)</label>
+
+                <input
+                    type="number"
+                    id="defaultDiscount"
+                    min="0"
+                    max="100"
+                    placeholder="0">
+
+            </div>
+
+            <div class="form-group">
+
+                <label>Maximum Discount (%)</label>
+
+                <input
+                    type="number"
+                    id="maximumDiscount"
+                    min="0"
+                    max="100"
+                    placeholder="30">
+
+            </div>
+
+            <div class="form-group full-width">
+
+                <label>
+
+                    <input
+                        type="checkbox"
+                        id="allowManualDiscount">
+
+                    Allow manual discount during billing
+
+                </label>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            RECEIPT SETTINGS
+    ===================================== -->
+
+    <div class="card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fa-solid fa-receipt"></i>
+
+                Receipt Settings
+
+            </h3>
+
+        </div>
+
+        <div class="form-grid">
+
+            <div class="form-group">
+
+                <label>Receipt Header</label>
+
+                <input
+                    type="text"
+                    id="receiptHeader"
+                    placeholder="Welcome to CafeSync">
+
+            </div>
+
+            <div class="form-group">
+
+                <label>Receipt Footer</label>
+
+                <input
+                    type="text"
+                    id="receiptFooter"
+                    placeholder="Thank you for visiting!">
+
+            </div>
+
+            <div class="form-group full-width">
+
+                <label>
+
+                    <input
+                        type="checkbox"
+                        id="showLogoOnReceipt">
+
+                    Print cafe logo on receipt
+
+                </label>
+
+            </div>
+
+            <div class="form-group full-width">
+
+                <label>
+
+                    <input
+                        type="checkbox"
+                        id="showGSTOnReceipt"
+                        checked>
+
+                    Print GST details on receipt
+
+                </label>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            PART D STARTS HERE
+    ===================================== -->
+    <!-- =====================================
+            USER & SECURITY SETTINGS
+    ===================================== -->
+
+    <div class="reports-grid">
+
+        <!-- User Account -->
+
+        <div class="card">
+
+            <div class="card-header">
+
+                <h3>
+
+                    <i class="fa-solid fa-user-shield"></i>
+
+                    User Account
+
+                </h3>
+
+            </div>
+
+            <div class="form-grid">
+
+                <div class="form-group">
+
+                    <label>Administrator Username</label>
+
+                    <input
+                        type="text"
+                        id="adminUsername"
+                        placeholder="Admin">
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Email</label>
+
+                    <input
+                        type="email"
+                        id="adminEmail"
+                        placeholder="admin@cafesync.com">
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Change Password -->
+
+        <div class="card">
+
+            <div class="card-header">
+
+                <h3>
+
+                    <i class="fa-solid fa-lock"></i>
+
+                    Change Password
+
+                </h3>
+
+            </div>
+
+            <div class="form-grid">
+
+                <div class="form-group">
+
+                    <label>Current Password</label>
+
+                    <input
+                        type="password"
+                        id="currentPassword">
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>New Password</label>
+
+                    <input
+                        type="password"
+                        id="newPassword">
+
+                </div>
+
+                <div class="form-group full-width">
+
+                    <label>Confirm Password</label>
+
+                    <input
+                        type="password"
+                        id="confirmPassword">
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            BACKUP & RESTORE
+    ===================================== -->
+
+    <div class="card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fa-solid fa-database"></i>
+
+                Backup & Restore
+
+            </h3>
+
+        </div>
+
+        <div class="action-buttons">
+
+            <button
+                id="backupDatabase"
+                class="primary-btn">
+
+                <i class="fa-solid fa-download"></i>
+
+                Backup Database
+
+            </button>
+
+            <button
+                id="restoreDatabase"
+                class="secondary-btn">
+
+                <i class="fa-solid fa-upload"></i>
+
+                Restore Database
+
+            </button>
+
+            <input
+                type="file"
+                id="restoreFile"
+                accept=".sql,.db,.sqlite"
+                hidden>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            NOTIFICATION SETTINGS
+    ===================================== -->
+
+    <div class="card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fa-solid fa-bell"></i>
+
+                Notifications
+
+            </h3>
+
+        </div>
+
+        <div class="form-grid">
+
+            <div class="form-group full-width">
+
+                <label>
+
+                    <input
+                        type="checkbox"
+                        id="lowStockAlert"
+                        checked>
+
+                    Enable Low Stock Alerts
+
+                </label>
+
+            </div>
+
+            <div class="form-group full-width">
+
+                <label>
+
+                    <input
+                        type="checkbox"
+                        id="dailySalesReport"
+                        checked>
+
+                    Email Daily Sales Report
+
+                </label>
+
+            </div>
+
+            <div class="form-group full-width">
+
+                <label>
+
+                    <input
+                        type="checkbox"
+                        id="employeeNotifications">
+
+                    Employee Notifications
+
+                </label>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            APPEARANCE
+    ===================================== -->
+
+    <div class="card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fa-solid fa-palette"></i>
+
+                Appearance
+
+            </h3>
+
+        </div>
+
+        <div class="form-grid">
+
+            <div class="form-group">
+
+                <label>Theme</label>
+
+                <select id="theme">
+
+                    <option value="light">Light</option>
+
+                    <option value="dark">Dark</option>
+
+                    <option value="system">System Default</option>
+
+                </select>
+
+            </div>
+
+            <div class="form-group">
+
+                <label>Language</label>
+
+                <select id="language">
+
+                    <option value="en">English</option>
+
+                    <option value="te">Telugu</option>
+
+                    <option value="hi">Hindi</option>
+
+                </select>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            PART E STARTS HERE
+    ===================================== -->
+    <!-- =====================================
+            SAVE & RESET SETTINGS
+    ===================================== -->
+
+    <div class="card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fa-solid fa-sliders"></i>
+
+                System Actions
+
+            </h3>
+
+        </div>
+
+        <div class="action-buttons">
+
+            <button
+                id="saveSettings"
+                class="primary-btn">
+
+                <i class="fa-solid fa-floppy-disk"></i>
+
+                Save Settings
+
+            </button>
+
+            <button
+                id="resetSettings"
+                class="secondary-btn">
+
+                <i class="fa-solid fa-rotate-left"></i>
+
+                Reset Settings
+
+            </button>
+
+            <button
+                id="clearCache"
+                class="danger-btn">
+
+                <i class="fa-solid fa-trash"></i>
+
+                Clear Cache
+
+            </button>
+
+        </div>
+
+    </div>
+
+    <!-- =====================================
+            LOADING OVERLAY
+    ===================================== -->
+
+    <div
+        id="loadingOverlay"
+        class="loading-overlay">
+
+        <div class="spinner"></div>
+
+        <p>
+
+            Saving Settings...
+
+        </p>
+
+    </div>
+
+</div>
+
+<!-- =====================================
+            FOOTER
+===================================== -->
+
+<footer class="footer">
+
+    <p>
+
+        © 2026 CafeSync POS System | Settings
+
+    </p>
+
+</footer>
+
+<!-- =====================================
+            JAVASCRIPT
+===================================== -->
+
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+
+</body>
+
+</html>

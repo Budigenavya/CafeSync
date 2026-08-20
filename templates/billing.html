@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>CafeSync POS | Billing</title>
+
+    <!-- Google Font -->
+
+    <link rel="preconnect"
+          href="https://fonts.googleapis.com">
+
+    <link rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet">
+
+    <!-- Font Awesome -->
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+    <!-- Billing CSS -->
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/billing.css') }}">
+
+</head>
+
+<body>
+
+
+
+<!-- ========================================================= -->
+<!-- SIDEBAR -->
+<!-- ========================================================= -->
+
+<div class="sidebar" id="sidebar">
+
+    <div class="logo">
+
+        <i class="fas fa-mug-hot"></i>
+
+        <span>CafeSync POS</span>
+
+    </div>
+
+    <ul>
+
+        <li>
+
+            <a href="/dashboard">
+
+                <i class="fas fa-chart-line"></i>
+
+                Dashboard
+
+            </a>
+
+        </li>
+
+        <li class="active">
+
+            <a href="/billing">
+
+                <i class="fas fa-cash-register"></i>
+
+                Billing
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/inventory">
+
+                <i class="fas fa-box-open"></i>
+
+                Inventory
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/kitchen">
+
+                <i class="fas fa-utensils"></i>
+
+                Kitchen
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/reports">
+
+                <i class="fas fa-chart-pie"></i>
+
+                Reports
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/employees">
+
+                <i class="fas fa-users"></i>
+
+                Employees
+
+            </a>
+
+        </li>
+        <li><a href="/orders">Orders</a></li>
+        <li><a href="/delivery">Delivery</a></li>
+
+        <li>
+
+            <a href="/customers">
+
+                <i class="fas fa-user-friends"></i>
+
+                Customers
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/tables">
+
+                <i class="fas fa-chair"></i>
+
+                Tables
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/settings">
+
+                <i class="fas fa-cog"></i>
+
+                Settings
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/logout">
+
+                <i class="fas fa-sign-out-alt"></i>
+
+                Logout
+
+            </a>
+
+        </li>
+
+    </ul>
+
+</div>
+
+<!-- ========================================================= -->
+<!-- MAIN CONTENT -->
+<!-- ========================================================= -->
+
+<div class="main">
+
+<!-- ========================================================= -->
+<!-- HEADER -->
+<!-- ========================================================= -->
+
+<header class="topbar">
+
+    <div class="left">
+
+        <button id="menuBtn">
+
+            <i class="fas fa-bars"></i>
+
+        </button>
+
+        <h2>CafeSync Billing</h2>
+
+    </div>
+
+    <div class="center">
+
+        <div class="search-box">
+
+            <i class="fas fa-search"></i>
+
+            <input
+                type="text"
+                id="searchProduct"
+                placeholder="Search products...">
+
+        </div>
+
+    </div>
+
+    <div class="right">
+
+        <button>
+
+            <i class="fas fa-bell"></i>
+
+        </button>
+
+        <button id="themeBtn">
+
+            <i class="fas fa-moon"></i>
+
+        </button>
+
+        <div id="clock">
+
+            00:00
+
+        </div>
+
+        <img
+            src="{{ url_for('static', filename='images/avatar.png') }}"
+            class="avatar">
+
+    </div>
+
+</header>
+
+<!-- ========================================================= -->
+<!-- POS LAYOUT -->
+<!-- ========================================================= -->
+
+<div class="billing-layout">
+
+    <!-- LEFT -->
+
+    <div class="left-panel">
+
+        <!-- Categories -->
+
+        <div class="category-section">
+
+            <h3>
+
+                Categories
+
+            </h3>
+
+            <div id="categoryList">
+
+                <!-- billing.js -->
+
+            </div>
+
+        </div>
+
+        <!-- Products -->
+
+        <div class="product-section">
+
+            <h3>
+
+                Products
+
+            </h3>
+
+            <div
+                id="productGrid"
+                class="product-grid">
+
+                <!-- billing.js -->
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- RIGHT -->
+
+    <div class="right-panel">
+	<div class="hold-orders">
+
+    		<h3>Held Orders</h3>
+
+    		<div id="heldOrders"></div>
+
+	</div>
+	
+
+        <h2>
+
+            Current Order
+
+        </h2>
+
+        <div class="customer-details">
+
+            <select id="tableNo">
+
+                <option value="1">Table 1</option>
+
+                <option value="2">Table 2</option>
+
+                <option value="3">Table 3</option>
+
+                <option value="">Take Away</option>
+
+            </select>
+
+            <input
+                type="text"
+                id="customerName"
+                placeholder="Customer Name">
+
+        </div>
+
+        <div
+            id="cartItems"
+            class="cart-items">
+
+            <!-- billing.js -->
+
+        </div>
+<!-- ========================================================= -->
+<!-- BILL SUMMARY -->
+<!-- ========================================================= -->
+
+<div class="bill-summary">
+
+    <div class="summary-row">
+
+        <span>Subtotal</span>
+
+        <span id="subtotal">₹0.00</span>
+
+    </div>
+
+    <div class="summary-row">
+
+        <span>GST (5%)</span>
+
+        <span id="gstAmount">₹0.00</span>
+
+    </div>
+
+    <div class="summary-row">
+
+        <span>Discount</span>
+
+        <input
+            type="number"
+            id="discount"
+            value="0"
+            min="0"
+            placeholder="0">
+
+    </div>
+
+    <hr>
+
+    <div class="summary-row total">
+
+        <strong>Grand Total</strong>
+
+        <strong id="grandTotal">₹0.00</strong>
+
+    </div>
+
+</div>
+
+<!-- ========================================================= -->
+<!-- PAYMENT METHODS -->
+<!-- ========================================================= -->
+
+<div class="payment-section">
+
+    <h3>Payment</h3>
+
+    <div class="payment-grid">
+
+        <button class="payment-btn active"
+                data-payment="Cash">
+
+            <i class="fas fa-money-bill-wave"></i>
+
+            Cash
+
+        </button>
+
+        <button class="payment-btn"
+                data-payment="Card">
+
+            <i class="fas fa-credit-card"></i>
+
+            Card
+
+        </button>
+
+        <button class="payment-btn"
+                data-payment="UPI">
+
+            <i class="fas fa-qrcode"></i>
+
+            UPI
+
+        </button>
+
+        <button class="payment-btn"
+                data-payment="Split">
+
+            <i class="fas fa-wallet"></i>
+
+            Split
+
+        </button>
+
+    </div>
+
+</div>
+
+<!-- ========================================================= -->
+<!-- ACTION BUTTONS -->
+<!-- ========================================================= -->
+
+<div class="action-buttons">
+
+    <button
+        id="holdOrder"
+        class="btn warning">
+
+        <i class="fas fa-pause-circle"></i>
+
+        Hold
+
+    </button>
+
+    <button
+        id="kotBtn"
+        class="btn secondary">
+
+        <i class="fas fa-receipt"></i>
+
+        KOT
+
+    </button>
+
+    <button
+        id="printBtn"
+        class="btn info">
+
+        <i class="fas fa-print"></i>
+
+        Print
+
+    </button>
+
+    <button
+        id="clearCart"
+        class="btn danger">
+
+        <i class="fas fa-trash"></i>
+
+        Clear
+
+    </button>
+
+    <button
+        id="checkoutBtn"
+        class="btn success">
+
+        <i class="fas fa-check-circle"></i>
+
+        Checkout
+	<button id="splitBill" class="action-btn">
+
+    		<i class="fas fa-users"></i>
+
+    		Split Bill
+
+	</button>
+
+    </button>
+
+</div>
+
+<!-- ========================================================= -->
+<!-- BILL INFO -->
+<!-- ========================================================= -->
+
+<div class="bill-info">
+
+    <div class="info-row">
+
+        <span>Bill No</span>
+
+        <span id="billNo">
+
+            INV-000001
+
+        </span>
+
+    </div>
+
+    <div class="info-row">
+
+        <span>Date</span>
+
+        <span id="billDate">
+
+            --
+
+        </span>
+
+    </div>
+
+    <div class="info-row">
+
+        <span>Time</span>
+
+        <span id="billTime">
+
+            --
+
+        </span>
+
+    </div>
+
+</div>
+
+</div>
+
+</div>
+
+
+
+<!-- ========================================================= -->
+<!-- BILLING JS -->
+<!-- ========================================================= -->
+
+<script src="{{ url_for('static', filename='js/billing.js') }}"></script>
+
+
+</body>
+
+</html>

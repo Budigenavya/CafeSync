@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<title>CafeSync | Kitchen Display</title>
+
+<link rel="stylesheet"
+          href="{{ url_for('static', filename='css/kitchen.css') }}">
+
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+</head>
+
+<body>
+{% include 'menu.html' %}
+
+<!-- ==========================================
+                HEADER
+========================================== -->
+
+<header class="topbar">
+
+    <div class="logo">
+
+        <i class="fa-solid fa-utensils"></i>
+
+        <h2>CafeSync Kitchen</h2>
+
+    </div>
+
+    <div class="header-right">
+
+        <div class="clock">
+
+            <i class="fa-solid fa-clock"></i>
+
+            <span id="liveClock"></span>
+
+        </div>
+
+        <button id="refreshOrders">
+
+            <i class="fa-solid fa-rotate"></i>
+
+            Refresh
+
+        </button>
+
+    </div>
+
+</header>
+
+<!-- ==========================================
+            SUMMARY
+========================================== -->
+
+<section class="summary">
+
+    <div class="summary-card pending">
+
+        <h2 id="pendingCount">0</h2>
+
+        <p>Pending</p>
+
+    </div>
+
+    <div class="summary-card preparing">
+
+        <h2 id="preparingCount">0</h2>
+
+        <p>Preparing</p>
+
+    </div>
+
+    <div class="summary-card ready">
+
+        <h2 id="readyCount">0</h2>
+
+        <p>Ready</p>
+
+    </div>
+
+    <div class="summary-card served">
+
+        <h2 id="servedCount">0</h2>
+
+        <p>Served Today</p>
+
+    </div>
+
+</section>
+
+<!-- ==========================================
+            SEARCH
+========================================== -->
+
+<section class="search-section">
+
+    <input
+
+    type="text"
+
+    id="searchOrder"
+
+    placeholder="Search Table / Order Number...">
+
+</section>
+
+<!-- ==========================================
+            ORDER BOARD
+========================================== -->
+
+<div class="kitchen-board">
+
+    <!-- Pending -->
+
+    <section class="column">
+
+        <div class="column-header pending-header">
+
+            <i class="fa-solid fa-hourglass-half"></i>
+
+            Pending
+
+        </div>
+
+        <div
+
+        id="pendingOrders"
+
+        class="orders-container">
+
+        </div>
+
+    </section>
+
+    <!-- Preparing -->
+
+    <section class="column">
+
+        <div class="column-header preparing-header">
+
+            <i class="fa-solid fa-fire-burner"></i>
+
+            Preparing
+
+        </div>
+
+        <div
+
+        id="preparingOrders"
+
+        class="orders-container">
+
+        </div>
+
+    </section>
+
+    <!-- Ready -->
+
+    <section class="column">
+
+        <div class="column-header ready-header">
+
+            <i class="fa-solid fa-circle-check"></i>
+
+            Ready
+
+        </div>
+
+        <div
+
+        id="readyOrders"
+
+        class="orders-container">
+
+        </div>
+
+    </section>
+
+</div>
+<!-- ==========================================
+            ORDER CARD TEMPLATE
+========================================== -->
+
+<template id="orderCardTemplate">
+
+    <div class="order-card">
+
+        <!-- Header -->
+
+        <div class="order-header">
+
+            <div>
+
+                <h3 class="table-name">
+
+                    Table 1
+
+                </h3>
+
+                <span class="order-number">
+
+                    #1001
+
+                </span>
+
+            </div>
+
+            <div class="order-time">
+
+                <i class="fa-solid fa-clock"></i>
+
+                <span>00:00</span>
+
+            </div>
+
+        </div>
+
+        <!-- Customer -->
+
+        <div class="customer-info">
+
+            <i class="fa-solid fa-user"></i>
+
+            <span class="customer-name">
+
+                Walk-in Customer
+
+            </span>
+
+        </div>
+
+        <!-- Items -->
+
+        <div class="items-list">
+
+            <div class="item-row">
+
+                <span>
+
+                    2 × Cappuccino
+
+                </span>
+
+            </div>
+
+            <div class="item-row">
+
+                <span>
+
+                    1 × Veg Burger
+
+                </span>
+
+            </div>
+
+            <div class="item-row">
+
+                <span>
+
+                    1 × French Fries
+
+                </span>
+
+            </div>
+
+        </div>
+
+        <!-- Notes -->
+
+        <div class="order-notes">
+
+            <i class="fa-solid fa-note-sticky"></i>
+
+            <span>
+
+                Extra Cheese • Less Sugar
+
+            </span>
+
+        </div>
+
+        <!-- Footer -->
+
+        <div class="order-footer">
+
+            <div class="bill-total">
+
+                ₹520
+
+            </div>
+
+            <div class="item-count"></div>
+
+        </div>
+
+        <!-- Actions -->
+
+        <div class="order-actions">
+
+            <button
+
+                class="btn-start"
+
+                onclick="startPreparing(1)">
+
+                <i class="fa-solid fa-fire"></i>
+
+                Start Preparing
+
+            </button>
+
+            <button
+
+                class="btn-ready"
+
+                onclick="markReady(1)">
+
+                <i class="fa-solid fa-circle-check"></i>
+
+                Ready
+
+            </button>
+
+            <button
+
+                class="btn-served"
+
+                onclick="serveOrder(1)">
+
+                <i class="fa-solid fa-utensils"></i>
+
+                Served
+
+            </button>
+
+        </div>
+
+    </div>
+
+</template>
+
+<!-- ==========================================
+            EMPTY STATE
+========================================== -->
+
+<div
+
+id="emptyOrders"
+
+class="empty-state">
+
+    <i class="fa-solid fa-bowl-food"></i>
+
+    <h2>
+
+        No Orders
+
+    </h2>
+
+    <p>
+
+        Waiting for new kitchen orders...
+
+    </p>
+
+</div>
+<!-- ==========================================
+            ORDER DETAILS MODAL
+========================================== -->
+
+<div
+
+id="orderModal"
+
+class="modal">
+
+    <div class="modal-content large">
+
+        <div class="modal-header">
+
+            <h2>
+
+                Order Details
+
+            </h2>
+
+            <button
+
+            class="close-modal">
+
+                <i class="fa-solid fa-xmark"></i>
+
+            </button>
+
+        </div>
+
+        <div
+
+        id="orderDetails"
+
+        class="modal-body">
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================
+            CHEF NOTES MODAL
+========================================== -->
+
+<div
+
+id="chefNoteModal"
+
+class="modal">
+
+    <div class="modal-content">
+
+        <div class="modal-header">
+
+            <h2>
+
+                Chef Notes
+
+            </h2>
+
+            <button
+
+            class="close-modal">
+
+                <i class="fa-solid fa-xmark"></i>
+
+            </button>
+
+        </div>
+
+        <div class="modal-body">
+
+            <textarea
+
+            id="chefNotes"
+
+            placeholder="Add preparation notes...">
+
+            </textarea>
+
+        </div>
+
+        <div class="modal-footer">
+
+            <button
+
+            id="saveChefNotes"
+
+            class="primary-btn">
+
+                Save Notes
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================
+            NEW ORDER NOTIFICATION
+========================================== -->
+
+<div
+
+id="notification"
+
+class="notification">
+
+    <div class="notification-icon">
+
+        <i class="fa-solid fa-bell"></i>
+
+    </div>
+
+    <div>
+
+        <h4>
+
+            New Kitchen Order
+
+        </h4>
+
+        <p id="notificationText">
+
+            Order Received
+
+        </p>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================
+            PRIORITY BADGE
+========================================== -->
+
+<template id="priorityTemplate">
+
+    <span class="priority-badge">
+
+        <i class="fa-solid fa-triangle-exclamation"></i>
+
+        High Priority
+
+    </span>
+
+</template>
+
+
+<!-- ==========================================
+            LOADING SCREEN
+========================================== -->
+
+<div
+
+id="loadingScreen"
+
+class="loading-screen">
+
+    <div class="loader">
+
+        <div class="spinner"></div>
+
+        <h3>
+
+            Loading Kitchen Orders...
+
+        </h3>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================
+            ORDER SOUND
+========================================== -->
+
+<audio
+
+id="newOrderSound"
+
+preload="auto">
+
+    <source
+
+    src="assets/audio/new-order.mp3"
+
+    type="audio/mpeg">
+
+</audio>
+
+
+<!-- ==========================================
+            LIVE STATUS BAR
+========================================== -->
+
+<footer class="status-bar">
+
+    <div>
+
+        Kitchen Status :
+
+        <span
+
+        id="kitchenStatus">
+
+            Online
+
+        </span>
+
+    </div>
+
+    <div>
+
+        Last Updated :
+
+        <span
+
+        id="lastUpdated">
+
+            --
+
+        </span>
+
+    </div>
+
+</footer>
+
+
+<script src="{{ url_for('static', filename='js/kitchen.js') }}"></script>
+<script src="{{ url_for('static', filename='js/menu.js') }}"></script>
+
+</body>
+
+</html>

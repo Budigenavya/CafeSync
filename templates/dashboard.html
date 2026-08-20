@@ -1,0 +1,2442 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>CafeSync POS Dashboard</title>
+
+    <!-- CSS -->
+
+    <link rel="stylesheet" href="{{ url_for('static',    filename='css/dashboard.css') }}">
+
+    <!-- Font Awesome -->
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+    <!-- Google Font -->
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet">
+
+    <!-- Chart.js -->
+
+
+</head>
+
+<body>
+
+{% include "menu.html" %}
+
+<div class="page-content">
+
+    <!-- Billing -->
+
+</div>
+
+<div class="container">
+
+<!-- ===========================================
+                SIDEBAR
+============================================ -->
+
+<aside class="sidebar" id="sidebar">
+
+    <!-- Logo -->
+
+    <div class="logo">
+
+        <i class="fa-solid fa-mug-hot"></i>
+
+        <span>CafeSync</span>
+
+    </div>
+
+    <!-- Biller -->
+
+    <div class="sidebar-user">
+
+        <div class="avatar">
+
+            <i class="fa-solid fa-user"></i>
+
+        </div>
+
+        <div class="user-info">
+
+            <h4 id="billerName">Administrator</h4>
+
+            <span>Cashier</span>
+
+        </div>
+
+    </div>
+
+    <!-- Menu -->
+
+    <ul class="menu">
+
+        <li class="active">
+
+            <a href="/dashboard">
+
+                <i class="fa-solid fa-house"></i>
+
+                <span>Dashboard</span>
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/billing">
+
+                <i class="fa-solid fa-cash-register"></i>
+
+                <span>Billing</span>
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/operators">
+
+                <i class="fa-solid fa-users"></i>
+
+                <span>Operators</span>
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/liveview">
+
+                <i class="fa-solid fa-tv"></i>
+
+                <span>Live View</span>
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/inventory">
+
+                <i class="fa-solid fa-boxes-stacked"></i>
+
+                <span>Inventory</span>
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/kitchen">
+
+                <i class="fa-solid fa-kitchen-set"></i>
+
+                <span>Kitchen</span>
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="/reports">
+
+                <i class="fa-solid fa-chart-line"></i>
+
+                <span>Reports</span>
+
+            </a>
+
+        </li>
+        <li><a href="/delivery">Delivery</a></li>
+        <li><a href="/orders">Orders</a></li>
+
+        <li>
+
+            <a href="/settings">
+
+                <i class="fa-solid fa-gear"></i>
+
+                <span>Settings</span>
+
+            </a>
+
+        </li>
+
+        <li id="checkUpdates">
+
+            <a href="#">
+
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+
+                <span>Check Updates</span>
+
+            </a>
+
+        </li>
+
+        <li class="logout">
+
+            <a href="login.html">
+
+                <i class="fa-solid fa-right-from-bracket"></i>
+
+                <span>Logout</span>
+
+            </a>
+
+        </li>
+
+    </ul>
+
+</aside>
+
+<!-- ===========================================
+            MAIN CONTENT START
+============================================ -->
+
+<div class="main">
+
+<!-- Topbar starts in Part 2 -->
+<!-- ===========================================
+                TOP NAVIGATION
+============================================ -->
+
+<header class="topbar">
+
+    <!-- Left Section -->
+
+    <div class="top-left">
+
+        <button id="menuToggle" class="menu-toggle">
+
+            <i class="fa-solid fa-bars"></i>
+
+        </button>
+
+        <div class="page-title">
+
+            <h2>Dashboard</h2>
+
+            <p>Welcome to CafeSync POS</p>
+
+        </div>
+
+    </div>
+
+    <!-- Center Search -->
+
+    <div class="top-search">
+
+        <i class="fa-solid fa-magnifying-glass"></i>
+
+        <input
+            type="text"
+            id="searchBox"
+            placeholder="Search bills, products, customers...">
+
+    </div>
+
+    <!-- Right Section -->
+
+    <div class="top-right">
+
+        <!-- Swiggy -->
+
+        <button
+            class="quick-app swiggy-btn"
+            title="Swiggy Orders">
+
+            <img
+                src="https://upload.wikimedia.org/wikipedia/commons/1/13/Swiggy_logo.png"
+                alt="Swiggy">
+
+            <span id="swiggyCount">0</span>
+
+        </button>
+
+        <!-- Zomato -->
+
+        <button
+            class="quick-app zomato-btn"
+            title="Zomato Orders">
+
+            <img
+                src="https://upload.wikimedia.org/wikipedia/commons/7/75/Zomato_logo.png"
+                alt="Zomato">
+
+            <span id="zomatoCount">0</span>
+
+        </button>
+
+        <!-- Notifications -->
+
+        <button
+            class="icon-btn"
+            id="notificationBtn">
+
+            <i class="fa-regular fa-bell"></i>
+
+            <span class="badge" id="notificationCount">
+
+                3
+
+            </span>
+
+        </button>
+
+        <!-- Theme -->
+
+        <button
+            class="icon-btn"
+            id="themeBtn">
+
+            <i class="fa-solid fa-moon"></i>
+
+        </button>
+
+        <!-- Fullscreen -->
+
+        <button
+            class="icon-btn"
+            id="fullscreenBtn">
+
+            <i class="fa-solid fa-expand"></i>
+
+        </button>
+
+        <!-- Date & Time -->
+
+        <div class="datetime">
+
+            <div id="currentDate">
+
+                23 July 2026
+
+            </div>
+
+            <div id="currentTime">
+
+                10:45 AM
+
+            </div>
+
+        </div>
+
+        <!-- Profile -->
+
+        <div class="profile">
+
+            <div class="profile-image">
+
+                <i class="fa-solid fa-user"></i>
+
+            </div>
+
+            <div class="profile-info">
+
+                <h4 id="profileName">
+
+                    Administrator
+
+                </h4>
+
+                <small>
+
+                    Cashier
+
+                </small>
+
+            </div>
+
+            <i class="fa-solid fa-chevron-down"></i>
+
+        </div>
+
+    </div>
+
+</header>
+
+<!-- ===========================================
+        DASHBOARD CONTENT STARTS
+============================================ -->
+
+<div class="dashboard-content">
+
+    <!-- Breadcrumb -->
+
+    <div class="breadcrumb">
+
+        <span>
+
+            <i class="fa-solid fa-house"></i>
+
+            Dashboard
+
+        </span>
+
+    </div>
+
+    <!-- Dashboard Cards Start -->
+<!-- ===========================================
+            DASHBOARD SUMMARY CARDS
+============================================ -->
+
+<section class="dashboard-cards">
+
+    <!-- Today's Sales -->
+
+    <div class="dashboard-card sales-card">
+
+        <div class="card-icon">
+
+            <i class="fa-solid fa-indian-rupee-sign"></i>
+
+        </div>
+
+        <div class="card-details">
+
+            <h5>Today's Sales</h5>
+
+            <h2 id="todaySales">₹0</h2>
+
+            <p class="positive">
+
+                <i class="fa-solid fa-arrow-trend-up"></i>
+
+                +12.5%
+
+            </p>
+
+        </div>
+
+    </div>
+
+    <!-- Orders -->
+
+    <div class="dashboard-card order-card">
+
+        <div class="card-icon">
+
+            <i class="fa-solid fa-receipt"></i>
+
+        </div>
+
+        <div class="card-details">
+
+            <h5>Today's Orders</h5>
+
+            <h2 id="todayOrders">0</h2>
+
+            <p>
+
+                Active Bills
+
+            </p>
+
+        </div>
+
+    </div>
+
+    <!-- Customers -->
+
+    <div class="dashboard-card customer-card">
+
+        <div class="card-icon">
+
+            <i class="fa-solid fa-users"></i>
+
+        </div>
+
+        <div class="card-details">
+
+            <h5>Customers</h5>
+
+            <h2 id="todayCustomers">0</h2>
+
+            <p>
+
+                Walk-In + Online
+
+            </p>
+
+        </div>
+
+    </div>
+
+    <!-- Revenue -->
+
+    <div class="dashboard-card revenue-card">
+
+        <div class="card-icon">
+
+            <i class="fa-solid fa-chart-line"></i>
+
+        </div>
+
+        <div class="card-details">
+
+            <h5>Monthly Revenue</h5>
+
+            <h2 id="monthlyRevenue">
+
+                ₹0
+
+            </h2>
+
+            <p class="positive">
+
+                Growing
+
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+                QUICK ACTIONS
+============================================ -->
+
+<section class="quick-actions">
+
+    <button onclick="location.href='billing.html'">
+
+        <i class="fa-solid fa-cash-register"></i>
+
+        <span>New Bill</span>
+
+    </button>
+
+    <button onclick="location.href='inventory.html'">
+
+        <i class="fa-solid fa-boxes-stacked"></i>
+
+        <span>Inventory</span>
+
+    </button>
+
+    <button onclick="location.href='kitchen.html'">
+
+        <i class="fa-solid fa-kitchen-set"></i>
+
+        <span>Kitchen</span>
+
+    </button>
+
+    <button onclick="location.href='reports.html'">
+
+        <i class="fa-solid fa-chart-column"></i>
+
+        <span>Reports</span>
+
+    </button>
+
+    <button onclick="window.print()">
+
+        <i class="fa-solid fa-print"></i>
+
+        <span>Print Report</span>
+
+    </button>
+
+</section>
+
+<!-- ===========================================
+            LIVE CAFE STATUS
+============================================ -->
+
+<section class="live-status">
+
+    <div class="status-box">
+
+        <div class="status-icon">
+
+            <i class="fa-solid fa-chair"></i>
+
+        </div>
+
+        <div>
+
+            <h4>Tables</h4>
+
+            <h2>
+
+                <span id="occupiedTables">0</span> /
+                <span id="totalTables">20</span>
+
+            </h2>
+
+            <small>Occupied</small>
+
+        </div>
+
+    </div>
+
+    <div class="status-box">
+
+        <div class="status-icon">
+
+            <i class="fa-solid fa-fire-burner"></i>
+
+        </div>
+
+        <div>
+
+            <h4>Kitchen Queue</h4>
+
+            <h2 id="kitchenQueue">
+
+                0
+
+            </h2>
+
+            <small>Preparing</small>
+
+        </div>
+
+    </div>
+
+    <div class="status-box">
+
+        <div class="status-icon">
+
+            <i class="fa-solid fa-motorcycle"></i>
+
+        </div>
+
+        <div>
+
+            <h4>Delivery Orders</h4>
+
+            <h2 id="deliveryOrders">
+
+                0
+
+            </h2>
+
+            <small>Swiggy + Zomato</small>
+
+        </div>
+
+    </div>
+
+    <div class="status-box">
+
+        <div class="status-icon">
+
+            <i class="fa-solid fa-user-check"></i>
+
+        </div>
+
+        <div>
+
+            <h4>Staff Online</h4>
+
+            <h2 id="staffOnline">
+
+                0
+
+            </h2>
+
+            <small>Employees</small>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+            SALES SECTION START
+============================================ -->
+
+<div class="dashboard-row">
+<!-- ===========================================
+            SALES OVERVIEW SECTION
+============================================ -->
+
+<section class="sales-overview">
+
+    <!-- Sales Chart -->
+
+    <div class="sales-chart-card">
+
+        <div class="card-header">
+
+            <div>
+
+                <h3>Sales Overview</h3>
+
+                <p>Daily, Weekly & Monthly Performance</p>
+
+            </div>
+
+            <div class="chart-actions">
+
+                <select id="salesFilter">
+
+                    <option value="today">Today</option>
+
+                    <option value="week">This Week</option>
+
+                    <option value="month" selected>This Month</option>
+
+                    <option value="year">This Year</option>
+
+                </select>
+
+                <button id="refreshChart">
+
+                    <i class="fa-solid fa-rotate"></i>
+
+                    Refresh
+
+                </button>
+
+            </div>
+
+        </div>
+
+        <div class="chart-container">
+
+            <canvas id="salesChart"></canvas>
+
+        </div>
+
+    </div>
+
+    <!-- Revenue Summary -->
+
+    <div class="summary-panel">
+
+        <h3>Revenue Summary</h3>
+
+        <hr>
+
+        <div class="summary-item">
+
+            <span>
+
+                <i class="fa-solid fa-wallet"></i>
+
+                Total Sales
+
+            </span>
+
+            <strong id="totalSales">
+
+                ₹0
+
+            </strong>
+
+        </div>
+
+        <div class="summary-item">
+
+            <span>
+
+                <i class="fa-solid fa-credit-card"></i>
+
+                Card
+
+            </span>
+
+            <strong id="cardSales">
+
+                ₹0
+
+            </strong>
+
+        </div>
+
+        <div class="summary-item">
+
+            <span>
+
+                <i class="fa-brands fa-google-pay"></i>
+
+                UPI
+
+            </span>
+
+            <strong id="upiSales">
+
+                ₹0
+
+            </strong>
+
+        </div>
+
+        <div class="summary-item">
+
+            <span>
+
+                <i class="fa-solid fa-money-bill-wave"></i>
+
+                Cash
+
+            </span>
+
+            <strong id="cashSales">
+
+                ₹0
+
+            </strong>
+
+        </div>
+
+        <div class="summary-item">
+
+            <span>
+
+                <i class="fa-solid fa-percent"></i>
+
+                GST
+
+            </span>
+
+            <strong id="gstAmount">
+
+                ₹0
+
+            </strong>
+
+        </div>
+
+        <div class="summary-item">
+
+            <span>
+
+                <i class="fa-solid fa-tag"></i>
+
+                Discounts
+
+            </span>
+
+            <strong id="discountAmount">
+
+                ₹0
+
+            </strong>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+            PERFORMANCE CARDS
+============================================ -->
+
+<section class="performance-grid">
+
+    <div class="performance-card">
+
+        <div class="performance-icon blue">
+
+            <i class="fa-solid fa-chart-line"></i>
+
+        </div>
+
+        <div>
+
+            <h5>Average Order</h5>
+
+            <h2 id="averageOrder">
+
+                ₹0
+
+            </h2>
+
+            <small>Per Bill</small>
+
+        </div>
+
+    </div>
+
+    <div class="performance-card">
+
+        <div class="performance-icon green">
+
+            <i class="fa-solid fa-burger"></i>
+
+        </div>
+
+        <div>
+
+            <h5>Best Seller</h5>
+
+            <h2 id="bestSeller">
+
+                --
+
+            </h2>
+
+            <small>Most Ordered</small>
+
+        </div>
+
+    </div>
+
+    <div class="performance-card">
+
+        <div class="performance-icon orange">
+
+            <i class="fa-solid fa-clock"></i>
+
+        </div>
+
+        <div>
+
+            <h5>Peak Hour</h5>
+
+            <h2 id="peakHour">
+
+                --
+
+            </h2>
+
+            <small>Highest Sales</small>
+
+        </div>
+
+    </div>
+
+    <div class="performance-card">
+
+        <div class="performance-icon purple">
+
+            <i class="fa-solid fa-star"></i>
+
+        </div>
+
+        <div>
+
+            <h5>Customer Rating</h5>
+
+            <h2 id="rating">
+
+                5.0
+
+            </h2>
+
+            <small>Average</small>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+            RECENT BILL SECTION
+============================================ -->
+
+<section class="recent-bills-section">
+<!-- ===========================================
+            RECENT BILLS & TRANSACTIONS
+============================================ -->
+
+<section class="recent-bills-section">
+
+    <div class="section-card">
+
+        <div class="section-header">
+
+            <div>
+
+                <h3>Recent Bills</h3>
+
+                <p>Latest completed and active bills</p>
+
+            </div>
+
+            <div class="section-actions">
+
+                <input
+                    type="text"
+                    id="billSearch"
+                    placeholder="Search Bill No">
+
+                <button id="refreshBills">
+
+                    <i class="fa-solid fa-rotate"></i>
+
+                    Refresh
+
+                </button>
+
+            </div>
+
+        </div>
+
+        <div class="table-responsive">
+
+            <table class="bill-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>Bill No</th>
+
+                        <th>Time</th>
+
+                        <th>Customer</th>
+
+                        <th>Type</th>
+
+                        <th>Payment</th>
+
+                        <th>Total</th>
+
+                        <th>Status</th>
+
+                        <th>Actions</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody id="recentBillsTable">
+
+                    <!-- Loaded using dashboard.js -->
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+        SAMPLE BILL ROW (Reference Only)
+
+<tr>
+
+<td>#INV1001</td>
+
+<td>10:42 AM</td>
+
+<td>Rahul</td>
+
+<td>Dine In</td>
+
+<td>UPI</td>
+
+<td>₹540</td>
+
+<td><span class="paid">Paid</span></td>
+
+<td>
+
+<button class="action-btn view">
+<i class="fa-solid fa-eye"></i>
+</button>
+
+<button class="action-btn print">
+<i class="fa-solid fa-print"></i>
+</button>
+
+<button class="action-btn pdf">
+<i class="fa-solid fa-file-pdf"></i>
+</button>
+
+<button class="action-btn refund">
+<i class="fa-solid fa-money-bill-wave"></i>
+</button>
+
+</td>
+
+</tr>
+
+============================================ -->
+
+
+
+<!-- ===========================================
+            LIVE TRANSACTIONS
+============================================ -->
+
+<section class="live-transactions">
+
+    <div class="section-card">
+
+        <div class="section-header">
+
+            <h3>Live Transactions</h3>
+
+            <span class="live-indicator">
+
+                <i class="fa-solid fa-circle"></i>
+
+                LIVE
+
+            </span>
+
+        </div>
+
+        <div class="transaction-list"
+
+             id="transactionList">
+
+            <!-- Dashboard.js loads here -->
+
+        </div>
+
+    </div>
+
+</section>
+
+
+
+<!-- ===========================================
+            PAYMENT SUMMARY
+============================================ -->
+
+<section class="payment-summary">
+
+    <div class="payment-card cash">
+
+        <i class="fa-solid fa-money-bill-wave"></i>
+
+        <div>
+
+            <h4>Cash</h4>
+
+            <h2 id="cashCollection">
+
+                ₹0
+
+            </h2>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="payment-card upi">
+
+        <i class="fa-brands fa-google-pay"></i>
+
+        <div>
+
+            <h4>UPI</h4>
+
+            <h2 id="upiCollection">
+
+                ₹0
+
+            </h2>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="payment-card card">
+
+        <i class="fa-solid fa-credit-card"></i>
+
+        <div>
+
+            <h4>Card</h4>
+
+            <h2 id="cardCollection">
+
+                ₹0
+
+            </h2>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="payment-card online">
+
+        <i class="fa-solid fa-mobile-screen-button"></i>
+
+        <div>
+
+            <h4>Online</h4>
+
+            <h2 id="onlineCollection">
+
+                ₹0
+
+            </h2>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+
+<!-- ===========================================
+        BILL ACTION MODAL
+============================================ -->
+
+<div
+class="modal"
+id="billModal">
+
+    <div class="modal-content">
+
+        <div class="modal-header">
+
+            <h3>
+
+                Bill Details
+
+            </h3>
+
+            <button id="closeBillModal">
+
+                <i class="fa-solid fa-xmark"></i>
+
+            </button>
+
+        </div>
+
+        <div class="modal-body"
+
+             id="billDetails">
+
+        </div>
+
+        <div class="modal-footer">
+
+            <button id="printInvoice">
+
+                <i class="fa-solid fa-print"></i>
+
+                Print
+
+            </button>
+
+            <button id="downloadInvoice">
+
+                <i class="fa-solid fa-file-pdf"></i>
+
+                PDF
+
+            </button>
+
+            <button id="closeModal">
+
+                Close
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- ===========================================
+        KITCHEN SECTION STARTS
+============================================ -->
+
+<section class="kitchen-section">
+<!-- ===========================================
+            KITCHEN DISPLAY SYSTEM (KDS)
+============================================ -->
+
+<section class="kitchen-section">
+
+    <div class="section-header">
+
+        <div>
+
+            <h3>Kitchen Display System</h3>
+
+            <p>Live kitchen orders</p>
+
+        </div>
+
+        <div class="section-actions">
+
+            <button id="refreshKitchen">
+
+                <i class="fa-solid fa-rotate"></i>
+
+                Refresh
+
+            </button>
+
+        </div>
+
+    </div>
+
+    <div class="kitchen-board">
+
+        <!-- Pending Orders -->
+
+        <div class="kitchen-column">
+
+            <div class="column-header pending">
+
+                <i class="fa-solid fa-hourglass-half"></i>
+
+                <h4>Pending</h4>
+
+                <span id="pendingCount">0</span>
+
+            </div>
+
+            <div id="pendingOrders">
+
+                <!-- dashboard.js -->
+
+            </div>
+
+        </div>
+
+        <!-- Preparing -->
+
+        <div class="kitchen-column">
+
+            <div class="column-header preparing">
+
+                <i class="fa-solid fa-fire-burner"></i>
+
+                <h4>Preparing</h4>
+
+                <span id="preparingCount">0</span>
+
+            </div>
+
+            <div id="preparingOrders">
+
+            </div>
+
+        </div>
+
+        <!-- Ready -->
+
+        <div class="kitchen-column">
+
+            <div class="column-header ready">
+
+                <i class="fa-solid fa-circle-check"></i>
+
+                <h4>Ready</h4>
+
+                <span id="readyCount">0</span>
+
+            </div>
+
+            <div id="readyOrders">
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+Sample Kitchen Card
+
+<div class="kitchen-card">
+
+<div class="kitchen-top">
+
+<h4>KOT-1025</h4>
+
+<span>03:15 PM</span>
+
+</div>
+
+<div class="customer">
+
+Table 5
+
+</div>
+
+<ul>
+
+<li>2 × Cappuccino</li>
+
+<li>1 × Burger</li>
+
+<li>1 × Fries</li>
+
+</ul>
+
+<div class="chef">
+
+Chef : Rahul
+
+</div>
+
+<div class="timer">
+
+05:42
+
+</div>
+
+<div class="kitchen-buttons">
+
+<button class="accept-btn">
+
+Accept
+
+</button>
+
+<button class="ready-btn">
+
+Ready
+
+</button>
+
+</div>
+
+</div>
+
+============================================ -->
+
+
+
+<!-- ===========================================
+            LIVE ORDER TRACKER
+============================================ -->
+
+<section class="order-tracker">
+
+    <div class="section-card">
+
+        <div class="section-header">
+
+            <h3>
+
+                Order Tracker
+
+            </h3>
+
+        </div>
+
+        <table class="tracker-table">
+
+            <thead>
+
+                <tr>
+
+                    <th>Bill</th>
+
+                    <th>Customer</th>
+
+                    <th>Table</th>
+
+                    <th>Status</th>
+
+                    <th>Time</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="orderTracker">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+
+<!-- ===========================================
+            KITCHEN PERFORMANCE
+============================================ -->
+
+<section class="kitchen-performance">
+
+    <div class="performance-box">
+
+        <i class="fa-solid fa-fire"></i>
+
+        <h2 id="avgPreparation">
+
+            0 Min
+
+        </h2>
+
+        <p>Average Preparation</p>
+
+    </div>
+
+    <div class="performance-box">
+
+        <i class="fa-solid fa-utensils"></i>
+
+        <h2 id="completedOrders">
+
+            0
+
+        </h2>
+
+        <p>Completed Orders</p>
+
+    </div>
+
+    <div class="performance-box">
+
+        <i class="fa-solid fa-clock"></i>
+
+        <h2 id="waitingOrders">
+
+            0
+
+        </h2>
+
+        <p>Waiting Orders</p>
+
+    </div>
+
+    <div class="performance-box">
+
+        <i class="fa-solid fa-user-chef"></i>
+
+        <h2 id="chefCount">
+
+            0
+
+        </h2>
+
+        <p>Chefs Online</p>
+
+    </div>
+
+</section>
+
+
+
+<!-- ===========================================
+        SWIGGY & ZOMATO SECTION STARTS
+============================================ -->
+
+<section class="delivery-section">
+<!-- ===========================================
+            SWIGGY & ZOMATO LIVE ORDERS
+============================================ -->
+
+<section class="delivery-section">
+
+    <div class="section-header">
+
+        <div>
+
+            <h3>Online Delivery Orders</h3>
+
+            <p>Live Swiggy & Zomato Orders</p>
+
+        </div>
+
+        <div class="section-actions">
+
+            <button id="refreshDelivery">
+
+                <i class="fa-solid fa-rotate"></i>
+
+                Refresh
+
+            </button>
+
+        </div>
+
+    </div>
+
+    <div class="delivery-grid">
+
+        <!-- ==========================
+                SWIGGY PANEL
+        =========================== -->
+
+        <div class="delivery-panel swiggy-panel">
+
+            <div class="delivery-header">
+
+                <div>
+
+                    <img src="{{ url_for('static',    filename='images/swiggy.png') }}">
+
+                    <h3>Swiggy Orders</h3>
+
+                </div>
+
+                <span class="delivery-count"
+                      id="swiggyOrdersCount">
+
+                    0
+
+                </span>
+
+            </div>
+
+            <div id="swiggyOrders">
+
+                <!-- dashboard.js -->
+
+            </div>
+
+        </div>
+
+        <!-- ==========================
+                ZOMATO PANEL
+        =========================== -->
+
+        <div class="delivery-panel zomato-panel">
+
+            <div class="delivery-header">
+
+                <div>
+
+                    <img src="{{ url_for('static', filename='images/zomato.png') }}">
+
+                    <h3>Zomato Orders</h3>
+
+                </div>
+
+                <span class="delivery-count"
+                      id="zomatoOrdersCount">
+
+                    0
+
+                </span>
+
+            </div>
+
+            <div id="zomatoOrders">
+
+                <!-- dashboard.js -->
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- ===========================================
+        SAMPLE DELIVERY CARD
+============================================ -->
+
+<!--
+
+<div class="delivery-card">
+
+    <div class="delivery-top">
+
+        <span class="order-id">
+
+            SW1024
+
+        </span>
+
+        <span class="new-order">
+
+            NEW
+
+        </span>
+
+    </div>
+
+    <div class="delivery-body">
+
+        <h4>Rahul Sharma</h4>
+
+        <p>
+
+            2 Cappuccino,
+            1 Burger
+
+        </p>
+
+        <div class="delivery-price">
+
+            ₹485
+
+        </div>
+
+        <div class="delivery-address">
+
+            Hitech City,
+            Hyderabad
+
+        </div>
+
+    </div>
+
+    <div class="delivery-footer">
+
+        <button class="accept-order">
+
+            Accept
+
+        </button>
+
+        <button class="reject-order">
+
+            Reject
+
+        </button>
+
+    </div>
+
+</div>
+
+-->
+
+
+
+<!-- ===========================================
+            DELIVERY ANALYTICS
+============================================ -->
+
+<section class="delivery-analytics">
+
+    <div class="analytics-card">
+
+        <i class="fa-solid fa-bag-shopping"></i>
+
+        <h2 id="todaySwiggy">
+
+            0
+
+        </h2>
+
+        <p>
+
+            Swiggy Today
+
+        </p>
+
+    </div>
+
+    <div class="analytics-card">
+
+        <i class="fa-solid fa-motorcycle"></i>
+
+        <h2 id="todayZomato">
+
+            0
+
+        </h2>
+
+        <p>
+
+            Zomato Today
+
+        </p>
+
+    </div>
+
+    <div class="analytics-card">
+
+        <i class="fa-solid fa-indian-rupee-sign"></i>
+
+        <h2 id="onlineRevenue">
+
+            ₹0
+
+        </h2>
+
+        <p>
+
+            Online Revenue
+
+        </p>
+
+    </div>
+
+    <div class="analytics-card">
+
+        <i class="fa-solid fa-stopwatch"></i>
+
+        <h2 id="avgDeliveryTime">
+
+            0 Min
+
+        </h2>
+
+        <p>
+
+            Average Delivery Time
+
+        </p>
+
+    </div>
+
+</section>
+
+
+<!-- ===========================================
+        DELIVERY STATUS TIMELINE
+============================================ -->
+
+<section class="delivery-status">
+
+    <div class="section-card">
+
+        <div class="section-header">
+
+            <h3>
+
+                Delivery Timeline
+
+            </h3>
+
+        </div>
+
+        <div id="deliveryTimeline">
+
+            <!-- dashboard.js -->
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- ===========================================
+        ONLINE PLATFORM STATUS
+============================================ -->
+
+<section class="platform-status">
+
+    <div class="platform-card">
+
+        <i class="fa-solid fa-wifi"></i>
+
+        <div>
+
+            <h4>
+
+                Swiggy
+
+            </h4>
+
+            <span id="swiggyStatus">
+
+                Connected
+
+            </span>
+
+        </div>
+
+    </div>
+
+    <div class="platform-card">
+
+        <i class="fa-solid fa-wifi"></i>
+
+        <div>
+
+            <h4>
+
+                Zomato
+
+            </h4>
+
+            <span id="zomatoStatus">
+
+                Connected
+
+            </span>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+            TABLE MANAGEMENT START
+============================================ -->
+
+<section class="table-management">
+<!-- ===========================================
+            TABLE MANAGEMENT
+============================================ -->
+
+<section class="table-management">
+
+    <div class="section-header">
+
+        <div>
+
+            <h3>Table Management</h3>
+
+            <p>Dine-In Table Status</p>
+
+        </div>
+
+        <button id="refreshTables">
+
+            <i class="fa-solid fa-rotate"></i>
+
+            Refresh
+
+        </button>
+
+    </div>
+
+    <div class="table-grid" id="tableGrid">
+
+        <!-- Table 1 -->
+
+        <div class="table-card available">
+
+            <div class="table-top">
+
+                <h3>Table 1</h3>
+
+                <span class="status available">
+
+                    Available
+
+                </span>
+
+            </div>
+
+            <div class="table-body">
+
+                <i class="fa-solid fa-chair"></i>
+
+                <p>Capacity : 4</p>
+
+            </div>
+
+            <button class="table-btn">
+
+                Reserve
+
+            </button>
+
+        </div>
+
+        <!-- Table 2 -->
+
+        <div class="table-card occupied">
+
+            <div class="table-top">
+
+                <h3>Table 2</h3>
+
+                <span class="status occupied">
+
+                    Occupied
+
+                </span>
+
+            </div>
+
+            <div class="table-body">
+
+                <i class="fa-solid fa-utensils"></i>
+
+                <p>Bill #1023</p>
+
+            </div>
+
+            <button class="table-btn">
+
+                View Bill
+
+            </button>
+
+        </div>
+
+        <!-- Remaining tables load dynamically -->
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+            TABLE SUMMARY
+============================================ -->
+
+<section class="table-summary">
+
+    <div class="summary-box green">
+
+        <i class="fa-solid fa-check"></i>
+
+        <h2 id="availableTables">
+
+            0
+
+        </h2>
+
+        <p>Available</p>
+
+    </div>
+
+    <div class="summary-box red">
+
+        <i class="fa-solid fa-users"></i>
+
+        <h2 id="occupiedTablesCount">
+
+            0
+
+        </h2>
+
+        <p>Occupied</p>
+
+    </div>
+
+    <div class="summary-box yellow">
+
+        <i class="fa-solid fa-clock"></i>
+
+        <h2 id="reservedTables">
+
+            0
+
+        </h2>
+
+        <p>Reserved</p>
+
+    </div>
+
+    <div class="summary-box blue">
+
+        <i class="fa-solid fa-chair"></i>
+
+        <h2 id="totalTablesCount">
+
+            20
+
+        </h2>
+
+        <p>Total Tables</p>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+            LIVE CAFE ACTIVITY
+============================================ -->
+
+<section class="live-activity">
+
+    <div class="section-card">
+
+        <div class="section-header">
+
+            <h3>
+
+                Live Activity
+
+            </h3>
+
+        </div>
+
+        <ul id="activityFeed">
+
+            <li>
+
+                <i class="fa-solid fa-receipt"></i>
+
+                Bill #1024 Generated
+
+            </li>
+
+            <li>
+
+                <i class="fa-solid fa-burger"></i>
+
+                Kitchen Started Order #458
+
+            </li>
+
+            <li>
+
+                <i class="fa-solid fa-motorcycle"></i>
+
+                Swiggy Pickup Assigned
+
+            </li>
+
+            <li>
+
+                <i class="fa-solid fa-circle-check"></i>
+
+                Payment Received
+
+            </li>
+
+        </ul>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+            CAFE INFORMATION
+============================================ -->
+
+<section class="cafe-info">
+
+    <div class="info-card">
+
+        <h3>CafeSync POS</h3>
+
+        <p>
+
+            Version :
+            <span id="version">
+
+                1.0.0
+
+            </span>
+
+        </p>
+
+        <p>
+
+            Last Backup :
+
+            <span id="lastBackup">
+
+                Today 10:45 AM
+
+            </span>
+
+        </p>
+
+        <p>
+
+            Database :
+
+            Connected
+
+        </p>
+
+    </div>
+
+</section>
+
+<!-- ===========================================
+        FOOTER STARTS
+============================================ -->
+
+<footer class="dashboard-footer">
+
+    <div>
+
+        © 2026 CafeSync POS
+
+    </div>
+
+    <div>
+
+        Developed for Smart Cafe Billing System
+
+    </div>
+
+</footer>
+<!-- ===========================================
+            NOTIFICATION PANEL
+============================================ -->
+
+<div class="notification-panel" id="notificationPanel">
+
+    <div class="panel-header">
+
+        <h3>Notifications</h3>
+
+        <button id="closeNotifications">
+
+            <i class="fa-solid fa-xmark"></i>
+
+        </button>
+
+    </div>
+
+    <div class="panel-body" id="notificationList">
+
+        <div class="notification-item">
+
+            <i class="fa-solid fa-bell"></i>
+
+            <div>
+
+                <h4>New Swiggy Order</h4>
+
+                <small>2 minutes ago</small>
+
+            </div>
+
+        </div>
+
+        <div class="notification-item">
+
+            <i class="fa-solid fa-print"></i>
+
+            <div>
+
+                <h4>Invoice Printed</h4>
+
+                <small>5 minutes ago</small>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- ===========================================
+            PROFILE DROPDOWN
+============================================ -->
+
+<div class="profile-dropdown" id="profileDropdown">
+
+    <a href="profile.html">
+
+        <i class="fa-solid fa-user"></i>
+
+        My Profile
+
+    </a>
+
+    <a href="operators.html">
+
+        <i class="fa-solid fa-users"></i>
+
+        Operators
+
+    </a>
+
+    <a href="settings.html">
+
+        <i class="fa-solid fa-gear"></i>
+
+        Settings
+
+    </a>
+
+    <hr>
+
+    <a href="login.html">
+
+        <i class="fa-solid fa-right-from-bracket"></i>
+
+        Logout
+
+    </a>
+
+</div>
+
+<!-- ===========================================
+            LOADING SCREEN
+============================================ -->
+
+<div id="loadingScreen">
+
+    <div class="loader">
+
+        <i class="fa-solid fa-mug-hot"></i>
+
+        <h2>CafeSync POS</h2>
+
+        <span>Loading Dashboard...</span>
+
+    </div>
+
+</div>
+
+<!-- ===========================================
+            TOAST MESSAGE
+============================================ -->
+
+<div id="toast">
+
+    <i class="fa-solid fa-circle-check"></i>
+
+    <span id="toastMessage">
+
+        Success
+
+    </span>
+
+</div>
+
+<!-- ===========================================
+            SETTINGS DRAWER
+============================================ -->
+
+<div class="settings-drawer" id="settingsDrawer">
+
+    <div class="drawer-header">
+
+        <h3>Quick Settings</h3>
+
+        <button id="closeDrawer">
+
+            <i class="fa-solid fa-xmark"></i>
+
+        </button>
+
+    </div>
+
+    <div class="drawer-body">
+
+        <label>
+
+            <input
+                type="checkbox"
+                id="darkMode">
+
+            Dark Mode
+
+        </label>
+
+        <label>
+
+            <input
+                type="checkbox"
+                id="soundAlerts"
+                checked>
+
+            Notification Sounds
+
+        </label>
+
+        <label>
+
+            <input
+                type="checkbox"
+                id="autoRefresh"
+                checked>
+
+            Auto Refresh
+
+        </label>
+
+        <label>
+
+            Refresh Interval
+
+        </label>
+
+        <select id="refreshInterval">
+
+            <option value="10">
+
+                10 Seconds
+
+            </option>
+
+            <option value="30" selected>
+
+                30 Seconds
+
+            </option>
+
+            <option value="60">
+
+                1 Minute
+
+            </option>
+
+        </select>
+
+    </div>
+
+</div>
+
+<!-- ===========================================
+            FLOATING ACTION BUTTON
+============================================ -->
+
+<button id="floatingBillingButton"
+        class="floating-btn">
+
+    <i class="fa-solid fa-plus"></i>
+
+</button>
+
+<!-- ===========================================
+            JAVASCRIPT FILES
+============================================ -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
+
+<script>
+
+document.getElementById("floatingBillingButton")
+.addEventListener("click", function(){
+
+    window.location.href = "/billing";
+
+});
+
+
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/menu.js') }}"></script>
+
+</div>
+
+<!-- End Main -->
+
+</div>
+
+<!-- End Container -->
+
+{% include "sidebar1.html" %}
+
+<div class="main-content">
+
+    <!-- Dashboard Content -->
+
+</div>
+
+</body>
+
+</html>

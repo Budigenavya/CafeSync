@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<title>CafeSync | Orders</title>
+
+<link rel="stylesheet"
+href="css/orders.css">
+
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<script src="{{ url_for('static', filename='js/menu.js') }}"></script>
+
+</head>
+
+<body>
+
+{% include "menu.html" %}
+
+<div class="page-content">
+
+    <!-- Billing -->
+
+</div>
+
+<!-- ==========================================
+                HEADER
+========================================== -->
+
+<header class="topbar">
+
+    <div class="logo">
+
+        <i class="fa-solid fa-receipt"></i>
+
+        <h2>CafeSync Orders</h2>
+
+    </div>
+
+    <div class="header-actions">
+
+        <button id="refreshOrders">
+
+            <i class="fa-solid fa-rotate"></i>
+
+            Refresh
+
+        </button>
+
+    </div>
+
+</header>
+
+<!-- ==========================================
+            SUMMARY CARDS
+========================================== -->
+
+<section class="summary">
+
+    <div class="summary-card">
+
+        <h2 id="todayOrders">0</h2>
+
+        <p>Today's Orders</p>
+
+    </div>
+
+    <div class="summary-card">
+
+        <h2 id="todayRevenue">₹0</h2>
+
+        <p>Today's Revenue</p>
+
+    </div>
+
+    <div class="summary-card">
+
+        <h2 id="pendingOrders">0</h2>
+
+        <p>Pending</p>
+
+    </div>
+
+    <div class="summary-card">
+
+        <h2 id="completedOrders">0</h2>
+
+        <p>Completed</p>
+
+    </div>
+
+</section>
+
+<!-- ==========================================
+                FILTERS
+========================================== -->
+
+<section class="filters">
+
+    <input
+
+        type="text"
+
+        id="searchOrder"
+
+        placeholder="Search Order No / Customer / Table">
+
+    <input
+
+        type="date"
+
+        id="filterDate">
+
+    <select id="statusFilter">
+
+        <option value="">All Status</option>
+
+        <option value="Pending">Pending</option>
+
+        <option value="Preparing">Preparing</option>
+
+        <option value="Ready">Ready</option>
+
+        <option value="Completed">Completed</option>
+
+        <option value="Cancelled">Cancelled</option>
+
+    </select>
+
+    <select id="paymentFilter">
+
+        <option value="">All Payments</option>
+
+        <option value="Cash">Cash</option>
+
+        <option value="Card">Card</option>
+
+        <option value="UPI">UPI</option>
+
+    </select>
+
+</section>
+
+<!-- ==========================================
+                ORDERS TABLE
+========================================== -->
+
+<div class="table-container">
+
+<table id="ordersTable">
+
+<thead>
+
+<tr>
+
+<th>Order No</th>
+
+<th>Table</th>
+
+<th>Customer</th>
+
+<th>Items</th>
+
+<th>Amount</th>
+
+<th>Payment</th>
+
+<th>Status</th>
+
+<th>Time</th>
+
+<th>Action</th>
+
+</tr>
+
+</thead>
+
+<tbody id="ordersBody">
+
+</tbody>
+
+</table>
+
+</div>
+<!-- ==========================================
+                ORDER DETAILS MODAL
+========================================== -->
+
+<div id="orderModal" class="modal">
+
+    <div class="modal-content large">
+
+        <div class="modal-header">
+
+            <h2>Order Details</h2>
+
+            <button class="close-modal">
+
+                <i class="fa-solid fa-xmark"></i>
+
+            </button>
+
+        </div>
+
+        <div id="orderDetails" class="modal-body">
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================
+                PRINT RECEIPT MODAL
+========================================== -->
+
+<div id="receiptModal" class="modal">
+
+    <div class="modal-content">
+
+        <div class="modal-header">
+
+            <h2>Receipt Preview</h2>
+
+            <button class="close-modal">
+
+                <i class="fa-solid fa-xmark"></i>
+
+            </button>
+
+        </div>
+
+        <div id="receiptPreview" class="modal-body">
+
+        </div>
+
+        <div class="modal-footer">
+
+            <button id="printReceipt"
+
+            class="primary-btn">
+
+                <i class="fa-solid fa-print"></i>
+
+                Print Receipt
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================
+                REFUND MODAL
+========================================== -->
+
+<div id="refundModal" class="modal">
+
+    <div class="modal-content">
+
+        <div class="modal-header">
+
+            <h2>Refund Order</h2>
+
+            <button class="close-modal">
+
+                <i class="fa-solid fa-xmark"></i>
+
+            </button>
+
+        </div>
+
+        <div class="modal-body">
+
+            <label>
+
+                Refund Reason
+
+            </label>
+
+            <textarea
+
+            id="refundReason"
+
+            placeholder="Enter refund reason...">
+
+            </textarea>
+
+        </div>
+
+        <div class="modal-footer">
+
+            <button
+
+            id="confirmRefund"
+
+            class="danger-btn">
+
+                Confirm Refund
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================
+                CANCEL MODAL
+========================================== -->
+
+<div id="cancelModal" class="modal">
+
+    <div class="modal-content">
+
+        <div class="modal-header">
+
+            <h2>Cancel Order</h2>
+
+            <button class="close-modal">
+
+                <i class="fa-solid fa-xmark"></i>
+
+            </button>
+
+        </div>
+
+        <div class="modal-body">
+
+            <p>
+
+                Are you sure you want to cancel this order?
+
+            </p>
+
+        </div>
+
+        <div class="modal-footer">
+
+            <button
+
+            id="confirmCancel"
+
+            class="danger-btn">
+
+                Yes, Cancel
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================
+                PAGINATION
+========================================== -->
+
+<section class="pagination">
+
+    <button id="prevPage">
+
+        <i class="fa-solid fa-angle-left"></i>
+
+    </button>
+
+    <span id="pageNumber">
+
+        Page 1
+
+    </span>
+
+    <button id="nextPage">
+
+        <i class="fa-solid fa-angle-right"></i>
+
+    </button>
+
+</section>
+
+
+<!-- ==========================================
+                FOOTER
+========================================== -->
+
+<footer class="footer">
+
+    <div>
+
+        Total Orders :
+
+        <span id="footerOrders">
+
+            0
+
+        </span>
+
+    </div>
+
+    <div>
+
+        Revenue :
+
+        <span id="footerRevenue">
+
+            ₹0
+
+        </span>
+
+    </div>
+
+</footer>
+
+
+<script src="js/orders.js"></script>
+
+</body>
+
+</html>
+<!-- ==========================================
+                ORDER ROW TEMPLATE
+========================================== -->
+
+<template id="orderRowTemplate">
+
+<tr>
+
+    <td class="order-number">
+
+        ORD0001
+
+    </td>
+
+    <td class="table-number">
+
+        T1
+
+    </td>
+
+    <td class="customer-name">
+
+        Walk-in Customer
+
+    </td>
+
+    <td class="item-count">
+
+        3 Items
+
+    </td>
+
+    <td class="order-total">
+
+        ₹350
+
+    </td>
+
+    <td class="payment-method">
+
+        Cash
+
+    </td>
+
+    <td>
+
+        <span class="status-badge pending">
+
+            Pending
+
+        </span>
+
+    </td>
+
+    <td class="order-time">
+
+        12:45 PM
+
+    </td>
+
+    <td>
+
+        <div class="action-buttons">
+
+            <button
+
+            class="view-btn"
+
+            title="View">
+
+                <i class="fa-solid fa-eye"></i>
+
+            </button>
+
+            <button
+
+            class="print-btn"
+
+            title="Print">
+
+                <i class="fa-solid fa-print"></i>
+
+            </button>
+
+            <button
+
+            class="cancel-btn"
+
+            title="Cancel">
+
+                <i class="fa-solid fa-ban"></i>
+
+            </button>
+
+            <button
+
+            class="refund-btn"
+
+            title="Refund">
+
+                <i class="fa-solid fa-money-bill-wave"></i>
+
+            </button>
+
+        </div>
+
+    </td>
+
+</tr>
+
+</template>
+
+
+<!-- ==========================================
+                EMPTY STATE
+========================================== -->
+
+<div
+
+id="emptyState"
+
+class="empty-state">
+
+    <i class="fa-solid fa-receipt"></i>
+
+    <h2>
+
+        No Orders Found
+
+    </h2>
+
+    <p>
+
+        Orders will appear here after customers place them.
+
+    </p>
+
+</div>
+
+
+<!-- ==========================================
+                LOADING SCREEN
+========================================== -->
+
+<div
+
+id="loadingScreen"
+
+class="loading-screen">
+
+    <div class="loader">
+
+        <div class="spinner"></div>
+
+        <h3>
+
+            Loading Orders...
+
+        </h3>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================
+                TOAST MESSAGE
+========================================== -->
+
+<div
+
+id="toast"
+
+class="toast">
+
+</div>
+
+
+<!-- ==========================================
+                EXPORT MENU
+========================================== -->
+
+<div
+
+id="exportMenu"
+
+class="export-menu">
+
+    <button id="exportExcel">
+
+        <i class="fa-solid fa-file-excel"></i>
+
+        Export Excel
+
+    </button>
+
+    <button id="exportPDF">
+
+        <i class="fa-solid fa-file-pdf"></i>
+
+        Export PDF
+
+    </button>
+
+</div>
+
+
+<!-- ==========================================
+                FLOATING ACTION BUTTON
+========================================== -->
+
+<button
+
+id="exportButton"
+
+class="floating-button">
+
+    <i class="fa-solid fa-download"></i>
+
+</button>

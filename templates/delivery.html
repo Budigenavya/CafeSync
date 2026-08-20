@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<title>CafeSync | Delivery Orders</title>
+
+<link rel="stylesheet"
+href="{{ url_for('static', filename='css/delivery.css') }}">
+
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+</head>
+
+<body>
+
+{% include "menu.html" %}
+
+<div class="page-content">
+
+    <!-- Billing -->
+
+</div>
+
+<!-- =======================================================
+SIDEBAR
+======================================================== -->
+
+<aside id="sidebar">
+
+<div class="logo">
+
+<i class="fas fa-mug-hot"></i>
+
+<span>CafeSync</span>
+
+</div>
+
+<nav>
+
+<ul>
+
+<li>
+<a href="/dashboard">
+<i class="fas fa-chart-line"></i>
+Dashboard
+</a>
+</li>
+
+<li>
+<a href="/delivery">
+<i class="fas fa-chart-line"></i>
+Delivery
+</a>
+</li>
+<li>
+<a href="/orders">
+<i class="fas fa-chart-line"></i>
+Orders
+</a>
+</li>
+
+<li>
+<a href="/billing">
+<i class="fas fa-cash-register"></i>
+Billing
+</a>
+</li>
+
+<li>
+<a href="/inventory">
+<i class="fas fa-boxes"></i>
+Inventory
+</a>
+</li>
+
+<li>
+<a href="/kitchen">
+<i class="fas fa-utensils"></i>
+Kitchen
+</a>
+</li>
+
+<li class="active">
+<a href="/delivery">
+<i class="fas fa-motorcycle"></i>
+Delivery
+</a>
+</li>
+
+<li>
+<a href="/reports">
+<i class="fas fa-chart-pie"></i>
+Reports
+</a>
+</li>
+
+<li>
+<a href="/employees">
+<i class="fas fa-users"></i>
+Employees
+</a>
+</li>
+
+<li>
+<a href="/settings">
+<i class="fas fa-cog"></i>
+Settings
+</a>
+</li>
+
+</ul>
+
+</nav>
+
+</aside>
+
+<!-- =======================================================
+MAIN
+======================================================== -->
+
+<div class="main">
+
+<!-- =======================================================
+TOPBAR
+======================================================== -->
+
+<header class="topbar">
+
+<div class="left">
+
+<button id="menuBtn">
+
+<i class="fas fa-bars"></i>
+
+</button>
+
+<h2>
+
+Delivery Dashboard
+
+</h2>
+
+</div>
+
+<div class="right">
+
+<button id="themeBtn">
+
+<i class="fas fa-moon"></i>
+
+</button>
+
+<button class="notify">
+
+<i class="fas fa-bell"></i>
+
+<span id="notificationCount">
+
+0
+
+</span>
+
+</button>
+
+<div class="profile">
+
+<img
+src="{{ url_for('static', filename='images/profile.png') }}">
+
+<div>
+
+<h4>Administrator</h4>
+
+<small>Manager</small>
+
+</div>
+
+</div>
+
+</div>
+
+</header>
+
+<!-- =======================================================
+STATISTICS
+======================================================== -->
+
+<section class="stats">
+
+<div class="card">
+
+<i class="fas fa-shopping-bag"></i>
+
+<h3 id="todayOrders">
+
+0
+
+</h3>
+
+<p>
+
+Today's Orders
+
+</p>
+
+</div>
+
+<div class="card">
+
+<i class="fas fa-indian-rupee-sign"></i>
+
+<h3 id="todayRevenue">
+
+₹0
+
+</h3>
+
+<p>
+
+Today's Revenue
+
+</p>
+
+</div>
+
+<div class="card">
+
+<i class="fas fa-clock"></i>
+
+<h3 id="pendingOrders">
+
+0
+
+</h3>
+
+<p>
+
+Pending
+
+</p>
+
+</div>
+
+<div class="card">
+
+<i class="fas fa-motorcycle"></i>
+
+<h3 id="deliveryPartners">
+
+0
+
+</h3>
+
+<p>
+
+Delivery Partners
+
+</p>
+
+</div>
+
+</section>
+
+<!-- =======================================================
+SEARCH
+======================================================== -->
+
+<section class="toolbar">
+
+<input
+
+type="text"
+
+id="searchOrder"
+
+placeholder="Search Order ID, Customer, Phone...">
+
+<select id="platformFilter">
+
+<option value="all">
+
+All Platforms
+
+</option>
+
+<option value="Swiggy">
+
+Swiggy
+
+</option>
+
+<option value="Zomato">
+
+Zomato
+
+</option>
+
+<option value="TakeAway">
+
+Take Away
+
+</option>
+
+<option value="Website">
+
+Website
+
+</option>
+
+</select>
+
+<select id="statusFilter">
+
+<option value="all">
+
+All Status
+
+</option>
+
+<option>
+
+Pending
+
+</option>
+
+<option>
+
+Preparing
+
+</option>
+
+<option>
+
+Ready
+
+</option>
+
+<option>
+
+Picked Up
+
+</option>
+
+<option>
+
+Delivered
+
+</option>
+
+<option>
+
+Cancelled
+
+</option>
+
+</select>
+
+<button id="refreshBtn">
+
+<i class="fas fa-rotate"></i>
+
+Refresh
+
+</button>
+
+</section>
+
+<!-- =======================================================
+PLATFORM TABS
+======================================================== -->
+
+<section class="platformTabs">
+
+<button class="tab active">
+
+<img
+
+src="{{ url_for('static', filename='images/swiggy.png') }}">
+
+Swiggy
+
+</button>
+
+<button class="tab">
+
+<img
+
+src="{{ url_for('static', filename='images/zomato.png') }}">
+
+Zomato
+
+</button>
+
+<button class="tab">
+
+<i class="fas fa-globe"></i>
+
+Website
+
+</button>
+
+<button class="tab">
+
+<i class="fas fa-store"></i>
+
+Take Away
+
+</button>
+
+</section>
+
+<!-- Orders section starts in Part 2 -->
+<!-- =======================================================
+                LIVE ORDER BOARD
+======================================================== -->
+
+<section class="orders-board">
+
+<!-- ================= NEW ORDERS ================= -->
+
+<div class="order-column">
+
+<div class="column-header pending">
+
+<i class="fas fa-bell"></i>
+
+<h3>New Orders</h3>
+
+<span id="newCount">0</span>
+
+</div>
+
+<div id="newOrders" class="order-list">
+
+<!-- JS Loads Orders -->
+
+</div>
+
+</div>
+
+<!-- ================= PREPARING ================= -->
+
+<div class="order-column">
+
+<div class="column-header preparing">
+
+<i class="fas fa-fire"></i>
+
+<h3>Preparing</h3>
+
+<span id="preparingCount">0</span>
+
+</div>
+
+<div id="preparingOrders" class="order-list">
+
+</div>
+
+</div>
+
+<!-- ================= READY ================= -->
+
+<div class="order-column">
+
+<div class="column-header ready">
+
+<i class="fas fa-box"></i>
+
+<h3>Ready</h3>
+
+<span id="readyCount">0</span>
+
+</div>
+
+<div id="readyOrders" class="order-list">
+
+</div>
+
+</div>
+
+<!-- ================= OUT FOR DELIVERY ================= -->
+
+<div class="order-column">
+
+<div class="column-header delivery">
+
+<i class="fas fa-motorcycle"></i>
+
+<h3>Out for Delivery</h3>
+
+<span id="deliveryCount">0</span>
+
+</div>
+
+<div id="deliveryOrders" class="order-list">
+
+</div>
+
+</div>
+
+<!-- ================= DELIVERED ================= -->
+
+<div class="order-column">
+
+<div class="column-header delivered">
+
+<i class="fas fa-check-circle"></i>
+
+<h3>Delivered</h3>
+
+<span id="completedCount">0</span>
+
+</div>
+
+<div id="completedOrders" class="order-list">
+
+</div>
+
+</div>
+
+</section>
+
+<!-- =======================================================
+                SAMPLE ORDER CARD
+                (Generated by JS)
+======================================================== -->
+
+<template id="orderTemplate">
+
+<div class="order-card">
+
+<div class="order-top">
+
+<div>
+
+<h3 class="order-id">
+
+#SW1023
+
+</h3>
+
+<p class="platform">
+
+<img
+src="{{ url_for('static', filename='images/swiggy.png') }}">
+
+Swiggy
+
+</p>
+
+</div>
+
+<span class="payment paid">
+
+Paid
+
+</span>
+
+</div>
+
+<hr>
+
+<div class="customer">
+
+<i class="fas fa-user"></i>
+
+<span class="customer-name">
+
+Rahul Sharma
+
+</span>
+
+</div>
+
+<div class="phone">
+
+<i class="fas fa-phone"></i>
+
+<span>
+
+9876543210
+
+</span>
+
+</div>
+
+<div class="address">
+
+<i class="fas fa-location-dot"></i>
+
+<span>
+
+Hyderabad
+
+</span>
+
+</div>
+
+<div class="items">
+
+<ul>
+
+<li>
+
+2 × Cappuccino
+
+</li>
+
+<li>
+
+1 × Veg Burger
+
+</li>
+
+<li>
+
+1 × Fries
+
+</li>
+
+</ul>
+
+</div>
+
+<div class="amount">
+
+<h2>
+
+₹540
+
+</h2>
+
+</div>
+
+<div class="time">
+
+<i class="fas fa-clock"></i>
+
+12:45 PM
+
+</div>
+
+<div class="actions">
+
+<button class="accept-btn">
+
+Accept
+
+</button>
+
+<button class="reject-btn">
+
+Reject
+
+</button>
+
+<button class="details-btn">
+
+Details
+
+</button>
+
+</div>
+
+</div>
+
+</template>
+
+<!-- =======================================================
+                LIVE ACTIVITY PANEL
+======================================================== -->
+
+<section class="activity-panel">
+
+<div class="activity-header">
+
+<h3>
+
+Recent Activity
+
+</h3>
+
+<button>
+
+Clear
+
+</button>
+
+</div>
+
+<div id="activityList">
+
+<div class="activity">
+
+<i class="fas fa-check-circle"></i>
+
+<span>
+
+Order #SW1002 Delivered
+
+</span>
+
+</div>
+
+<div class="activity">
+
+<i class="fas fa-fire"></i>
+
+<span>
+
+Kitchen started preparing #ZM222
+
+</span>
+
+</div>
+
+<div class="activity">
+
+<i class="fas fa-motorcycle"></i>
+
+<span>
+
+Pickup Boy Assigned
+
+</span>
+
+</div>
+
+</div>
+
+</section>
+<!-- =======================================================
+                ORDER DETAILS MODAL
+======================================================== -->
+
+<div id="orderModal" class="modal">
+
+    <div class="modal-content">
+
+        <!-- ========================================= -->
+        <!-- HEADER -->
+        <!-- ========================================= -->
+
+        <div class="modal-header">
+
+            <h2>
+
+                <i class="fas fa-receipt"></i>
+
+                Order Details
+
+            </h2>
+
+            <button id="closeModal">
+
+                <i class="fas fa-times"></i>
+
+            </button>
+
+        </div>
+
+        <!-- ========================================= -->
+        <!-- BODY -->
+        <!-- ========================================= -->
+
+        <div class="modal-body">
+
+            <!-- LEFT SIDE -->
+
+            <div class="modal-left">
+
+                <div class="info-card">
+
+                    <h3>
+
+                        Customer Information
+
+                    </h3>
+
+                    <p>
+
+                        <strong>Name :</strong>
+
+                        <span id="modalCustomer">
+
+                        Rahul Sharma
+
+                        </span>
+
+                    </p>
+
+                    <p>
+
+                        <strong>Phone :</strong>
+
+                        <span id="modalPhone">
+
+                        9876543210
+
+                        </span>
+
+                    </p>
+
+                    <p>
+
+                        <strong>Address :</strong>
+
+                        <span id="modalAddress">
+
+                        Hyderabad
+
+                        </span>
+
+                    </p>
+
+                </div>
+
+                <div class="info-card">
+
+                    <h3>
+
+                        Delivery Details
+
+                    </h3>
+
+                    <p>
+
+                        <strong>Platform :</strong>
+
+                        <span id="modalPlatform">
+
+                        Swiggy
+
+                        </span>
+
+                    </p>
+
+                    <p>
+
+                        <strong>Order ID :</strong>
+
+                        <span id="modalOrderID">
+
+                        SW1023
+
+                        </span>
+
+                    </p>
+
+                    <p>
+
+                        <strong>Payment :</strong>
+
+                        <span id="modalPayment">
+
+                        Paid Online
+
+                        </span>
+
+                    </p>
+
+                    <p>
+
+                        <strong>Status :</strong>
+
+                        <span id="modalStatus">
+
+                        Pending
+
+                        </span>
+
+                    </p>
+
+                </div>
+
+                <div class="info-card">
+
+                    <h3>
+
+                        Rider
+
+                    </h3>
+
+                    <p>
+
+                        <strong>Name :</strong>
+
+                        <span id="modalRider">
+
+                        Not Assigned
+
+                        </span>
+
+                    </p>
+
+                    <p>
+
+                        <strong>Vehicle :</strong>
+
+                        <span id="modalVehicle">
+
+                        --
+
+                        </span>
+
+                    </p>
+
+                    <p>
+
+                        <strong>Mobile :</strong>
+
+                        <span id="modalRiderPhone">
+
+                        --
+
+                        </span>
+
+                    </p>
+
+                </div>
+
+            </div>
+
+            <!-- RIGHT SIDE -->
+
+            <div class="modal-right">
+
+                <div class="bill-card">
+
+                    <h3>
+
+                        Ordered Items
+
+                    </h3>
+
+                    <table>
+
+                        <thead>
+
+                            <tr>
+
+                                <th>Item</th>
+
+                                <th>Qty</th>
+
+                                <th>Price</th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody id="modalItems">
+
+                            <!-- Loaded by JS -->
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+                <div class="bill-summary">
+
+                    <h3>
+
+                        Bill Summary
+
+                    </h3>
+
+                    <div class="summary-row">
+
+                        <span>Subtotal</span>
+
+                        <span id="modalSubtotal">
+
+                        ₹0
+
+                        </span>
+
+                    </div>
+
+                    <div class="summary-row">
+
+                        <span>GST</span>
+
+                        <span id="modalGST">
+
+                        ₹0
+
+                        </span>
+
+                    </div>
+
+                    <div class="summary-row">
+
+                        <span>Delivery Fee</span>
+
+                        <span id="modalDelivery">
+
+                        ₹0
+
+                        </span>
+
+                    </div>
+
+                    <div class="summary-row">
+
+                        <span>Discount</span>
+
+                        <span id="modalDiscount">
+
+                        ₹0
+
+                        </span>
+
+                    </div>
+
+                    <hr>
+
+                    <div class="summary-row total">
+
+                        <span>Total</span>
+
+                        <span id="modalTotal">
+
+                        ₹0
+
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- ========================================= -->
+        <!-- FOOTER -->
+        <!-- ========================================= -->
+
+        <div class="modal-footer">
+
+            <button id="acceptOrder">
+
+                <i class="fas fa-check"></i>
+
+                Accept
+
+            </button>
+
+            <button id="prepareOrder">
+
+                <i class="fas fa-fire"></i>
+
+                Preparing
+
+            </button>
+
+            <button id="readyOrder">
+
+                <i class="fas fa-box"></i>
+
+                Ready
+
+            </button>
+
+            <button id="assignRider">
+
+                <i class="fas fa-motorcycle"></i>
+
+                Assign Rider
+
+            </button>
+
+            <button id="printInvoice">
+
+                <i class="fas fa-print"></i>
+
+                Print
+
+            </button>
+
+            <button id="cancelOrder">
+
+                <i class="fas fa-times-circle"></i>
+
+                Cancel
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+<!-- =======================================================
+                RIDER ASSIGNMENT PANEL
+======================================================== -->
+
+<section class="rider-panel">
+
+    <div class="panel-header">
+
+        <h2>
+
+            <i class="fas fa-motorcycle"></i>
+
+            Delivery Riders
+
+        </h2>
+
+        <button id="refreshRiders">
+
+            <i class="fas fa-rotate"></i>
+
+            Refresh
+
+        </button>
+
+    </div>
+
+    <div class="riders-grid">
+
+        <div class="rider-card">
+
+            <div class="rider-top">
+
+                <img
+                src="{{ url_for('static', filename='images/rider.png') }}">
+
+                <div>
+
+                    <h3>
+
+                        Rahul Kumar
+
+                    </h3>
+
+                    <small>
+
+                        Bike • TS09AB1234
+
+                    </small>
+
+                </div>
+
+            </div>
+
+            <div class="rider-status online">
+
+                Online
+
+            </div>
+
+            <button class="assign-btn">
+
+                Assign
+
+            </button>
+
+        </div>
+
+        <div class="rider-card">
+
+            <div class="rider-top">
+
+                <img
+                src="{{ url_for('static', filename='images/rider.png') }}">
+
+                <div>
+
+                    <h3>
+
+                        Kiran
+
+                    </h3>
+
+                    <small>
+
+                        Scooter • TS08CD8765
+
+                    </small>
+
+                </div>
+
+            </div>
+
+            <div class="rider-status busy">
+
+                Busy
+
+            </div>
+
+            <button disabled>
+
+                Assigned
+
+            </button>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- =======================================================
+                DELIVERY MAP
+======================================================== -->
+
+<section class="map-section">
+
+    <div class="panel-header">
+
+        <h2>
+
+            <i class="fas fa-map-location-dot"></i>
+
+            Delivery Location
+
+        </h2>
+
+    </div>
+
+    <div id="deliveryMap">
+
+        <iframe
+
+        width="100%"
+
+        height="350"
+
+        frameborder="0"
+
+        style="border:0"
+
+        src="https://maps.google.com/maps?q=Hyderabad&t=&z=13&ie=UTF8&iwloc=&output=embed"
+
+        allowfullscreen>
+
+        </iframe>
+
+    </div>
+
+</section>
+
+<!-- =======================================================
+                CUSTOMER CONTACT
+======================================================== -->
+
+<section class="customer-contact">
+
+    <div class="contact-card">
+
+        <h2>
+
+            Customer Contact
+
+        </h2>
+
+        <button id="callCustomer">
+
+            <i class="fas fa-phone"></i>
+
+            Call Customer
+
+        </button>
+
+        <button id="messageCustomer">
+
+            <i class="fas fa-message"></i>
+
+            Send SMS
+
+        </button>
+
+        <button id="navigationBtn">
+
+            <i class="fas fa-location-arrow"></i>
+
+            Navigate
+
+        </button>
+
+    </div>
+
+</section>
+
+<!-- =======================================================
+                DELIVERY NOTES
+======================================================== -->
+
+<section class="notes-section">
+
+    <h2>
+
+        Delivery Notes
+
+    </h2>
+
+    <textarea
+
+    id="deliveryNotes"
+
+    placeholder="Example:
+Ring the bell once.
+Leave parcel at security.
+Extra ketchup.
+">
+
+    </textarea>
+
+</section>
+
+<!-- =======================================================
+                LIVE NOTIFICATIONS
+======================================================== -->
+
+<aside id="notificationPanel">
+
+    <div class="panel-header">
+
+        <h2>
+
+            Notifications
+
+        </h2>
+
+    </div>
+
+    <div id="notificationList">
+
+        <div class="notify-item new">
+
+            <i class="fas fa-bell"></i>
+
+            <div>
+
+                <strong>
+
+                    New Swiggy Order
+
+                </strong>
+
+                <small>
+
+                    Order SW1025 received
+
+                </small>
+
+            </div>
+
+        </div>
+
+        <div class="notify-item success">
+
+            <i class="fas fa-check-circle"></i>
+
+            <div>
+
+                <strong>
+
+                    Order Delivered
+
+                </strong>
+
+                <small>
+
+                    ZM220 Delivered
+
+                </small>
+
+            </div>
+
+        </div>
+
+        <div class="notify-item warning">
+
+            <i class="fas fa-clock"></i>
+
+            <div>
+
+                <strong>
+
+                    Late Delivery
+
+                </strong>
+
+                <small>
+
+                    SW1018 waiting 18 min
+
+                </small>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</aside>
+
+<!-- =======================================================
+                ORDER TIMER
+======================================================== -->
+
+<section class="timer-board">
+
+    <div class="timer-card green">
+
+        <h3>
+
+            Fast
+
+        </h3>
+
+        <h1>
+
+            05:30
+
+        </h1>
+
+    </div>
+
+    <div class="timer-card orange">
+
+        <h3>
+
+            Average
+
+        </h3>
+
+        <h1>
+
+            12:45
+
+        </h1>
+
+    </div>
+
+    <div class="timer-card red">
+
+        <h3>
+
+            Delayed
+
+        </h3>
+
+        <h1>
+
+            23:10
+
+        </h1>
+
+
+
+
+    </div>
+
+</section>
+
+<script src="{{ url_for('static', filename='js/delivery.js') }}"></script>
+<script src="{{ url_for('static', filename='js/menu.js') }}"></script>
+
+</body>
+
+</html>

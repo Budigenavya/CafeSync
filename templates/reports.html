@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<title>CafeSync Reports</title>
+<link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/reports.css') }}">
+<link
+rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<script
+src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<link rel="stylesheet"
+          href="{{ url_for('static', filename='css/menu.css') }}">
+
+</head>
+
+<body>
+
+
+<!-- ======================================================
+                    HEADER
+======================================================= -->
+
+<header class="topbar">
+
+<div class="logo">
+
+<i class="fas fa-chart-line"></i>
+
+<h2>CafeSync Reports</h2>
+
+</div>
+
+<div class="header-actions">
+
+<button id="refreshReport">
+
+<i class="fas fa-rotate"></i>
+
+Refresh
+
+</button>
+
+<button id="printReport">
+
+<i class="fas fa-print"></i>
+
+Print
+
+</button>
+
+<button id="exportExcel">
+
+<i class="fas fa-file-excel"></i>
+
+Excel
+
+</button>
+
+<button id="exportPDF">
+
+<i class="fas fa-file-pdf"></i>
+
+PDF
+
+</button>
+
+</div>
+
+</header>
+
+<!-- ======================================================
+                    FILTERS
+======================================================= -->
+
+<section class="filters">
+
+<select id="reportType">
+
+<option value="today">Today</option>
+
+<option value="yesterday">Yesterday</option>
+
+<option value="week">This Week</option>
+
+<option value="month">This Month</option>
+
+<option value="year">This Year</option>
+
+<option value="custom">Custom Range</option>
+
+</select>
+
+<input
+type="date"
+id="startDate">
+
+<input
+type="date"
+id="endDate">
+
+<button id="applyFilter">
+
+Apply Filter
+
+</button>
+
+</section>
+
+<!-- ======================================================
+                    SUMMARY
+======================================================= -->
+
+<section class="summary">
+
+<div class="summary-card">
+
+<h2 id="todayRevenue">₹0</h2>
+
+<p>Today's Revenue</p>
+
+</div>
+
+<div class="summary-card">
+
+<h2 id="todayOrders">0</h2>
+
+<p>Today's Orders</p>
+
+</div>
+
+<div class="summary-card">
+
+<h2 id="averageBill">₹0</h2>
+
+<p>Average Bill</p>
+
+</div>
+
+<div class="summary-card">
+
+<h2 id="gstCollected">₹0</h2>
+
+<p>GST Collected</p>
+
+</div>
+
+<div class="summary-card">
+
+<h2 id="refundAmount">₹0</h2>
+
+<p>Refund Amount</p>
+
+</div>
+
+<div class="summary-card">
+
+<h2 id="totalCustomers">0</h2>
+
+<p>Customers</p>
+
+</div>
+
+</section>
+<!-- ======================================================
+                    CHARTS
+======================================================= -->
+
+<section class="charts">
+
+    <!-- Daily / Weekly / Monthly Sales -->
+
+    <div class="chart-card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fas fa-chart-line"></i>
+
+                Sales Trend
+
+            </h3>
+
+        </div>
+
+        <div class="chart-body">
+
+            <canvas id="salesChart"></canvas>
+
+        </div>
+
+    </div>
+
+    <!-- Payment Methods -->
+
+    <div class="chart-card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fas fa-credit-card"></i>
+
+                Payment Methods
+
+            </h3>
+
+        </div>
+
+        <div class="chart-body">
+
+            <canvas id="paymentChart"></canvas>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ======================================================
+                    SECOND CHART ROW
+======================================================= -->
+
+<section class="charts">
+
+    <!-- Best Selling Products -->
+
+    <div class="chart-card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fas fa-mug-hot"></i>
+
+                Best Selling Products
+
+            </h3>
+
+        </div>
+
+        <div class="chart-body">
+
+            <canvas id="productChart"></canvas>
+
+        </div>
+
+    </div>
+
+    <!-- Category Sales -->
+
+    <div class="chart-card">
+
+        <div class="card-header">
+
+            <h3>
+
+                <i class="fas fa-layer-group"></i>
+
+                Category Sales
+
+            </h3>
+
+        </div>
+
+        <div class="chart-body">
+
+            <canvas id="categoryChart"></canvas>
+
+        </div>
+
+    </div>
+
+</section>
+
+<!-- ======================================================
+                    QUICK STATS
+======================================================= -->
+
+<section class="quick-stats">
+
+    <div class="stat-box">
+
+        <i class="fas fa-arrow-up"></i>
+
+        <div>
+
+            <h3 id="highestSale">
+
+                ₹0
+
+            </h3>
+
+            <p>Highest Bill</p>
+
+        </div>
+
+    </div>
+
+    <div class="stat-box">
+
+        <i class="fas fa-arrow-down"></i>
+
+        <div>
+
+            <h3 id="lowestSale">
+
+                ₹0
+
+            </h3>
+
+            <p>Lowest Bill</p>
+
+        </div>
+
+    </div>
+
+    <div class="stat-box">
+
+        <i class="fas fa-fire"></i>
+
+        <div>
+
+            <h3 id="bestHour">
+
+                --
+
+            </h3>
+
+            <p>Peak Hour</p>
+
+        </div>
+
+    </div>
+
+    <div class="stat-box">
+
+        <i class="fas fa-users"></i>
+
+        <div>
+
+            <h3 id="repeatCustomers">
+
+                0
+
+            </h3>
+
+            <p>Repeat Customers</p>
+
+        </div>
+
+    </div>
+
+</section>
+<!-- ======================================================
+                    RECENT ORDERS
+======================================================= -->
+
+<section class="report-section">
+
+    <div class="section-header">
+
+        <h2>
+
+            <i class="fas fa-receipt"></i>
+
+            Recent Orders
+
+        </h2>
+
+    </div>
+
+    <div class="table-container">
+
+        <table id="recentOrdersTable">
+
+            <thead>
+
+                <tr>
+
+                    <th>Order No</th>
+
+                    <th>Customer</th>
+
+                    <th>Table</th>
+
+                    <th>Payment</th>
+
+                    <th>Status</th>
+
+                    <th>Total</th>
+
+                    <th>Date</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="recentOrdersBody">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- ======================================================
+                    TOP SELLING PRODUCTS
+======================================================= -->
+
+<section class="report-section">
+
+    <div class="section-header">
+
+        <h2>
+
+            <i class="fas fa-trophy"></i>
+
+            Top Selling Products
+
+        </h2>
+
+    </div>
+
+    <div class="table-container">
+
+        <table id="topProductsTable">
+
+            <thead>
+
+                <tr>
+
+                    <th>Rank</th>
+
+                    <th>Product</th>
+
+                    <th>Category</th>
+
+                    <th>Quantity Sold</th>
+
+                    <th>Revenue</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="topProductsBody">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- ======================================================
+                    LOW STOCK PRODUCTS
+======================================================= -->
+
+<section class="report-section">
+
+    <div class="section-header">
+
+        <h2>
+
+            <i class="fas fa-box-open"></i>
+
+            Low Stock Products
+
+        </h2>
+
+    </div>
+
+    <div class="table-container">
+
+        <table id="lowStockTable">
+
+            <thead>
+
+                <tr>
+
+                    <th>Product</th>
+
+                    <th>Category</th>
+
+                    <th>Current Stock</th>
+
+                    <th>Status</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="lowStockBody">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- ======================================================
+                    REFUND REPORT
+======================================================= -->
+
+<section class="report-section">
+
+    <div class="section-header">
+
+        <h2>
+
+            <i class="fas fa-rotate-left"></i>
+
+            Refund Report
+
+        </h2>
+
+    </div>
+
+    <div class="table-container">
+
+        <table id="refundTable">
+
+            <thead>
+
+                <tr>
+
+                    <th>Order No</th>
+
+                    <th>Customer</th>
+
+                    <th>Reason</th>
+
+                    <th>Amount</th>
+
+                    <th>Date</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="refundBody">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- ======================================================
+                    REPORT FOOTER
+======================================================= -->
+
+<footer class="report-footer">
+
+    <div>
+
+        Total Orders :
+
+        <strong id="footerOrders">
+
+            0
+
+        </strong>
+
+    </div>
+
+    <div>
+
+        Total Revenue :
+
+        <strong id="footerRevenue">
+
+            ₹0
+
+        </strong>
+
+    </div>
+
+    <div>
+
+        Generated :
+
+        <strong id="generatedTime">
+
+            --
+
+        </strong>
+
+    </div>
+
+</footer>
+<!-- ======================================================
+                    ORDER DETAILS MODAL
+======================================================= -->
+
+<div class="modal" id="orderModal">
+
+    <div class="modal-content large">
+
+        <div class="modal-header">
+
+            <h2>
+
+                <i class="fas fa-receipt"></i>
+
+                Order Details
+
+            </h2>
+
+            <button class="close-modal">
+
+                &times;
+
+            </button>
+
+        </div>
+
+        <div class="modal-body">
+
+            <div id="orderDetails">
+
+            </div>
+
+        </div>
+
+        <div class="modal-footer">
+
+            <button id="printOrderBtn"
+
+            class="primary-btn">
+
+                <i class="fas fa-print"></i>
+
+                Print
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+                    PRODUCT DETAILS MODAL
+======================================================= -->
+
+<div class="modal" id="productModal">
+
+    <div class="modal-content">
+
+        <div class="modal-header">
+
+            <h2>
+
+                <i class="fas fa-mug-hot"></i>
+
+                Product Details
+
+            </h2>
+
+            <button class="close-modal">
+
+                &times;
+
+            </button>
+
+        </div>
+
+        <div class="modal-body">
+
+            <div id="productDetails">
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+                    CHART MODAL
+======================================================= -->
+
+<div class="modal" id="chartModal">
+
+    <div class="modal-content large">
+
+        <div class="modal-header">
+
+            <h2>
+
+                Analytics
+
+            </h2>
+
+            <button class="close-modal">
+
+                &times;
+
+            </button>
+
+        </div>
+
+        <div class="modal-body">
+
+            <canvas id="fullscreenChart">
+
+            </canvas>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+                    LOADING SCREEN
+======================================================= -->
+
+<div class="loading-screen"
+
+id="loadingScreen">
+
+    <div class="loader">
+
+        <div class="spinner">
+
+        </div>
+
+        <p>
+
+            Loading Reports...
+
+        </p>
+
+    </div>
+
+</div>
+
+
+<!-- ======================================================
+                    TOAST
+======================================================= -->
+
+<div class="toast"
+
+id="toast">
+
+    Report Generated
+
+</div>
+
+
+<!-- ======================================================
+                    EMPTY STATE
+======================================================= -->
+
+<div class="empty-state"
+
+id="emptyState">
+
+    <i class="fas fa-chart-bar">
+
+    </i>
+
+    <h2>
+
+        No Report Available
+
+    </h2>
+
+    <p>
+
+        Try another date range.
+
+    </p>
+
+</div>
+
+
+<!-- ======================================================
+                    EXPORT MENU
+======================================================= -->
+
+<div class="export-menu"
+
+id="exportMenu">
+
+    <button id="downloadPDF">
+
+        <i class="fas fa-file-pdf">
+
+        </i>
+
+        Download PDF
+
+    </button>
+
+    <button id="downloadExcel">
+
+        <i class="fas fa-file-excel">
+
+        </i>
+
+        Download Excel
+
+    </button>
+
+    <button id="printFullReport">
+
+        <i class="fas fa-print">
+
+        </i>
+
+        Print Report
+
+    </button>
+
+</div>
+
+
+<!-- ======================================================
+                    FLOATING BUTTON
+======================================================= -->
+
+<button
+
+id="floatingExport"
+
+class="floating-button">
+
+    <i class="fas fa-download">
+
+    </i>
+
+</button>
+<!-- ======================================================
+                    RECENT ORDER TEMPLATE
+======================================================= -->
+
+<template id="recentOrderTemplate">
+
+    <tr>
+
+        <td class="order-number"></td>
+
+        <td class="customer-name"></td>
+
+        <td class="table-number"></td>
+
+        <td class="payment-method"></td>
+
+        <td>
+
+            <span class="status-badge"></span>
+
+        </td>
+
+        <td class="order-total"></td>
+
+        <td class="order-date"></td>
+
+    </tr>
+
+</template>
+
+
+<!-- ======================================================
+                    TOP PRODUCT TEMPLATE
+======================================================= -->
+
+<template id="topProductTemplate">
+
+    <tr>
+
+        <td class="rank"></td>
+
+        <td class="product-name"></td>
+
+        <td class="category-name"></td>
+
+        <td class="quantity-sold"></td>
+
+        <td class="product-revenue"></td>
+
+    </tr>
+
+</template>
+
+
+<!-- ======================================================
+                    LOW STOCK TEMPLATE
+======================================================= -->
+
+<template id="lowStockTemplate">
+
+    <tr>
+
+        <td class="stock-product"></td>
+
+        <td class="stock-category"></td>
+
+        <td class="stock-quantity"></td>
+
+        <td>
+
+            <span class="stock-status"></span>
+
+        </td>
+
+    </tr>
+
+</template>
+
+
+<!-- ======================================================
+                    REFUND TEMPLATE
+======================================================= -->
+
+<template id="refundTemplate">
+
+    <tr>
+
+        <td class="refund-order"></td>
+
+        <td class="refund-customer"></td>
+
+        <td class="refund-reason"></td>
+
+        <td class="refund-amount"></td>
+
+        <td class="refund-date"></td>
+
+    </tr>
+
+</template>
+
+
+<!-- ======================================================
+                    JAVASCRIPT
+======================================================= -->
+
+<script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+<script src="{{ url_for('static', filename='js/menu.js') }}"></script>
+
+
+</body>
+
+</html>

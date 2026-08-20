@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>CafeSync | Inventory</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/inventory.css') }}">
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+</head>
+
+<body>
+
+
+
+<!-- ==========================================================
+                        SIDEBAR
+=========================================================== -->
+
+<div class="sidebar">
+
+    <div class="logo">
+
+        <i class="fa-solid fa-mug-hot"></i>
+
+        <h2>CafeSync</h2>
+
+    </div>
+
+    <ul>
+
+        <li>
+            <a href="/dashboard">
+                <i class="fa-solid fa-chart-line"></i>
+                Dashboard
+            </a>
+        </li>
+
+        <li>
+            <a href="/billing">
+                <i class="fa-solid fa-cash-register"></i>
+                Billing
+            </a>
+        </li>
+
+        <li class="active">
+    	    <a href="/inventory">
+                <i class="fa-solid fa-boxes-stacked"></i>
+            	Inventory
+    	    </a>
+        </li>
+        </li>
+
+        <li>
+            <a href="/kitchen">
+                <i class="fa-solid fa-utensils"></i>
+                Kitchen
+            </a>
+        </li>
+
+        <li>
+            <a href="/orders">
+                <i class="fa-solid fa-receipt"></i>
+                Orders
+            </a>
+        </li>
+
+        <li>
+            <a href="/reports">
+                <i class="fa-solid fa-chart-pie"></i>
+                Reports
+            </a>
+        </li>
+
+        <li>
+            <a href="/employees">
+                <i class="fa-solid fa-user-group"></i>
+                Employees
+            </a>
+        </li><a href="/delivery">Delivery</a></li>
+        <li><
+
+
+        <li>
+            <a href="/settings">
+                <i class="fa-solid fa-gear"></i>
+                Settings
+            </a>
+        </li>
+
+    </ul>
+
+</div>
+
+
+<!-- ==========================================================
+                        MAIN CONTENT
+=========================================================== -->
+
+<div class="main">
+
+<!-- ==========================================================
+                        TOPBAR
+=========================================================== -->
+
+<div class="topbar">
+
+    <div class="title">
+
+        <h1>Inventory Management</h1>
+
+        <p>Manage Products, Categories & Stock</p>
+
+    </div>
+
+    <div class="top-actions">
+
+        <button id="darkModeBtn">
+
+            <i class="fa-solid fa-moon"></i>
+
+        </button>
+
+        <button id="notificationBtn">
+
+            <i class="fa-solid fa-bell"></i>
+
+        </button>
+
+        <img src="../static/images/avatar.png"
+             class="profile">
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================================
+                    SUMMARY CARDS
+=========================================================== -->
+
+<div class="summary-grid">
+
+    <div class="summary-card">
+
+        <i class="fa-solid fa-box"></i>
+
+        <h2 id="totalProducts">0</h2>
+
+        <span>Total Products</span>
+
+    </div>
+
+    <div class="summary-card">
+
+        <i class="fa-solid fa-layer-group"></i>
+
+        <h2 id="totalCategories">0</h2>
+
+        <span>Categories</span>
+
+    </div>
+
+    <div class="summary-card">
+
+        <i class="fa-solid fa-indian-rupee-sign"></i>
+
+        <h2 id="inventoryValue">₹0</h2>
+
+        <span>Inventory Value</span>
+
+    </div>
+
+    <div class="summary-card danger">
+
+        <i class="fa-solid fa-triangle-exclamation"></i>
+
+        <h2 id="lowStockCount">0</h2>
+
+        <span>Low Stock</span>
+
+    </div>
+
+</div>
+
+
+<!-- ==========================================================
+                    SEARCH & FILTER
+=========================================================== -->
+
+<div class="toolbar">
+
+    <input
+        type="text"
+        id="searchProduct"
+        placeholder="Search Product...">
+
+    <select id="categoryFilter">
+
+        <option value="">All Categories</option>
+
+    </select>
+
+    <select id="stockFilter">
+
+        <option value="">All Stock</option>
+
+        <option value="low">Low Stock</option>
+
+        <option value="available">Available</option>
+
+    </select>
+
+    <button id="searchBtn">
+
+        <i class="fa-solid fa-search"></i>
+
+        Search
+
+    </button>
+
+    <button id="resetBtn">
+
+        Reset
+
+    </button>
+
+</div>
+
+
+<!-- ==========================================================
+                    ACTION BUTTONS
+=========================================================== -->
+
+<div class="action-bar">
+
+    <button id="addProductBtn">
+
+        <i class="fa-solid fa-plus"></i>
+
+        Add Product
+
+    </button>
+
+    <button id="addCategoryBtn">
+
+        <i class="fa-solid fa-folder-plus"></i>
+
+        Add Category
+
+    </button>
+
+    <button id="exportExcel">
+
+        <i class="fa-solid fa-file-excel"></i>
+
+        Export Excel
+
+    </button>
+
+    <button id="exportPDF">
+
+        <i class="fa-solid fa-file-pdf"></i>
+
+        Export PDF
+
+    </button>
+
+</div>
+
+
+<!-- ==========================================================
+                    PRODUCT TABLE
+=========================================================== -->
+
+<div class="table-container">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Barcode</th>
+
+<th>Product</th>
+
+<th>Category</th>
+
+<th>Price</th>
+
+<th>Stock</th>
+
+<th>Status</th>
+
+<th>Actions</th>
+
+</tr>
+
+</thead>
+
+<tbody id="productTable">
+
+</tbody>
+
+</table>
+
+</div>
+<!-- ==========================================================
+                    ADD PRODUCT MODAL
+=========================================================== -->
+
+<div class="modal" id="productModal">
+
+    <div class="modal-content">
+
+        <div class="modal-header">
+
+            <h2 id="productModalTitle">
+
+                Add Product
+
+            </h2>
+
+            <span class="close" id="closeProductModal">
+
+                &times;
+
+            </span>
+
+        </div>
+
+        <form id="productForm">
+
+            <input
+                type="hidden"
+                id="productId">
+
+            <div class="form-grid">
+
+                <div class="form-group">
+
+                    <label>Product Name</label>
+
+                    <input
+                        type="text"
+                        id="productName"
+                        required>
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Category</label>
+
+                    <select
+                        id="productCategory"
+                        required>
+
+                    </select>
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Barcode</label>
+
+                    <input
+                        type="text"
+                        id="barcode">
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Price</label>
+
+                    <input
+                        type="number"
+                        id="price"
+                        min="0"
+                        step="0.01">
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Stock</label>
+
+                    <input
+                        type="number"
+                        id="stock"
+                        min="0">
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Low Stock Alert</label>
+
+                    <input
+                        type="number"
+                        id="lowStock"
+                        value="10">
+
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+
+                <button
+                    type="submit"
+                    class="save-btn">
+
+                    Save Product
+
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+
+<!-- ==========================================================
+                    CATEGORY MODAL
+=========================================================== -->
+
+<div class="modal" id="categoryModal">
+
+    <div class="modal-content small">
+
+        <div class="modal-header">
+
+            <h2>
+
+                Add Category
+
+            </h2>
+
+            <span class="close"
+                  id="closeCategoryModal">
+
+                &times;
+
+            </span>
+
+        </div>
+
+        <form id="categoryForm">
+
+            <div class="form-group">
+
+                <label>Category Name</label>
+
+                <input
+                    type="text"
+                    id="categoryName"
+                    required>
+
+            </div>
+
+            <button
+                type="submit"
+                class="save-btn">
+
+                Save Category
+
+            </button>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+
+<!-- ==========================================================
+                    BARCODE MODAL
+=========================================================== -->
+
+<div class="modal" id="barcodeModal">
+
+    <div class="modal-content small">
+
+        <div class="modal-header">
+
+            <h2>
+
+                Product Barcode
+
+            </h2>
+
+            <span class="close"
+                  id="closeBarcodeModal">
+
+                &times;
+
+            </span>
+
+        </div>
+
+        <div class="barcode-area">
+
+            <svg id="barcodePreview"></svg>
+
+        </div>
+
+        <button
+            id="printBarcode"
+            class="save-btn">
+
+            Print Barcode
+
+        </button>
+
+    </div>
+
+</div>
+
+
+
+<!-- ==========================================================
+                    LOW STOCK PANEL
+=========================================================== -->
+
+<div class="panel">
+
+    <div class="panel-header">
+
+        <h2>
+
+            Low Stock Products
+
+        </h2>
+
+    </div>
+
+    <table>
+
+        <thead>
+
+            <tr>
+
+                <th>Product</th>
+
+                <th>Stock</th>
+
+                <th>Status</th>
+
+            </tr>
+
+        </thead>
+
+        <tbody id="lowStockTable">
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+
+<!-- ==========================================================
+                    LOADING SCREEN
+=========================================================== -->
+
+<div id="loadingScreen">
+
+    <div class="loader"></div>
+
+    <p>
+
+        Loading Inventory...
+
+    </p>
+
+</div>
+
+
+
+<!-- ==========================================================
+                    TOAST MESSAGE
+=========================================================== -->
+
+<div id="toast">
+
+</div>
+
+
+
+<!-- ==========================================================
+                    DELETE CONFIRMATION
+=========================================================== -->
+
+<div class="modal"
+     id="deleteModal">
+
+    <div class="modal-content small">
+
+        <h2>
+
+            Delete Product
+
+        </h2>
+
+        <p>
+
+            Are you sure you want to delete this product?
+
+        </p>
+
+        <div class="modal-footer">
+
+            <button
+                id="confirmDelete"
+                class="delete-btn">
+
+                Delete
+
+            </button>
+
+            <button
+                id="cancelDelete">
+
+                Cancel
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="{{ url_for('static', filename='js/inventory.js') }}"></script>
+
+</div>
+
+</body>
+
+</html>
