@@ -118,6 +118,7 @@ def get_products():
                 p.name,
                 p.price,
                 p.stock,
+                p.is_available,
                 p.barcode,
                 p.category_id,
                 c.name AS category_name
@@ -148,6 +149,30 @@ def get_products():
             "message":"Unable To Load Products"
         }),500
 
+
+@inventory_bp.route(
+    "/inventory/products/<int:product_id>/availability",
+    methods=["PUT"]
+)
+def set_product_availability(product_id):
+    data = request.get_json(silent=True) or {}
+    value = data.get("is_available")
+    if value not in (True, False, 0, 1):
+        return error("Availability must be on or off.", 400)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE products SET is_available=? WHERE id=?",
+        (int(bool(value)), product_id)
+    )
+    if cursor.rowcount == 0:
+        conn.close()
+        return error("Menu item not found.", 404)
+    conn.commit()
+    conn.close()
+    return success("Menu item availability updated.", {"id": product_id, "is_available": int(bool(value))})
+
 # ==========================================================
 # ERROR RESPONSE
 # ==========================================================
@@ -161,6 +186,58 @@ def error(message,status=400):
         "message":message
 
     }),status
+
+
+@inventory_bp.route("/inventory/products/<int:product_id>/addons", methods=["GET"])
+def get_product_addons(product_id):
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT id, product_id, name, price, is_available FROM product_addons WHERE product_id=? ORDER BY name",
+        (product_id,)
+    ).fetchall()
+    conn.close()
+    return success("Product add-ons loaded", [dict(row) for row in rows])
+
+
+@inventory_bp.route("/inventory/products/<int:product_id>/addons", methods=["POST"])
+def add_product_addon(product_id):
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name") or "").strip()[:80]
+    try:
+        price = float(data.get("price", 0))
+    except (TypeError, ValueError):
+        return error("Enter a valid add-on price.")
+    if not name:
+        return error("Add-on name is required.")
+    if price < 0 or price > 100000:
+        return error("Add-on price must be between ₹0 and ₹100,000.")
+    conn = get_connection()
+    cursor = conn.cursor()
+    if not cursor.execute("SELECT 1 FROM products WHERE id=?", (product_id,)).fetchone():
+        conn.close()
+        return error("Menu item not found.", 404)
+    cursor.execute(
+        "INSERT INTO product_addons(product_id, name, price) VALUES (?, ?, ?)",
+        (product_id, name, price)
+    )
+    addon_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return success("Add-on added.", {"id": addon_id, "product_id": product_id, "name": name, "price": price})
+
+
+@inventory_bp.route("/inventory/addons/<int:addon_id>", methods=["DELETE"])
+def delete_product_addon(addon_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM product_addons WHERE id=?", (addon_id,))
+    if cursor.rowcount == 0:
+        conn.close()
+        return error("Add-on not found.", 404)
+    conn.commit()
+    conn.close()
+    return success("Add-on deleted.")
 
 # ==========================================================
 # INVENTORY DASHBOARD
@@ -627,6 +704,8 @@ def delete_product(product_id):
         conn = get_connection()
 
         cursor = conn.cursor()
+
+        cursor.execute("DELETE FROM product_addons WHERE product_id=?", (product_id,))
 
         cursor.execute("""
 

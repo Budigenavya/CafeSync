@@ -1,0 +1,17 @@
+:root{--o-ink:#26362d;--o-muted:#819087;--o-line:#e4ebe6;--o-green:#167b5c;--o-bg:#f4f7f5}
+body{background:var(--o-bg);color:var(--o-ink);font-family:'DM Sans','Segoe UI',sans-serif}
+.page-content{display:none}
+body>header.topbar:not(.orders-header){height:58px;background:#fff;color:var(--o-ink);padding:0 22px;border-bottom:1px solid var(--o-line);box-shadow:none;position:sticky;top:0;z-index:10}
+body>header.topbar:not(.orders-header) .logo span{font-size:14px;font-weight:800;color:#304036}
+body>header.topbar:not(.orders-header) .logo i{font-size:16px;color:var(--o-green)}
+.orders-header{height:57px;margin:15px 22px 0;padding:0 15px;background:#fff;color:var(--o-ink);border:1px solid var(--o-line);border-radius:9px;box-shadow:none}
+.orders-header .logo i{font-size:17px;color:var(--o-green)}.orders-header .logo h2{font-size:15px;color:var(--o-ink)}
+.summary{padding:14px 22px 10px;gap:10px}.summary-card{background:#fff;border:1px solid var(--o-line);border-radius:9px;box-shadow:none;padding:13px 15px}.summary-card h2{font-size:20px;color:var(--o-green)}.summary-card p{font-size:10px;color:var(--o-muted);font-weight:700}
+.filters{margin:0 22px 12px;padding:11px;display:flex;gap:8px;background:#fff;border:1px solid var(--o-line);border-radius:9px}.filters input,.filters select{height:36px;border:1px solid var(--o-line);border-radius:6px;background:#fbfcfb;padding:0 10px;color:#45554b;font-size:11px;min-width:145px}.filters input:first-child{flex:1;min-width:220px}
+.table-container{margin:0 22px;border:1px solid var(--o-line);border-radius:9px;background:#fff;box-shadow:none;overflow:auto}#ordersTable{width:100%;border-collapse:collapse}#ordersTable th{background:#f7f9f7;color:#89958d;font-size:9px;letter-spacing:.5px;padding:12px 11px;text-align:left}#ordersTable td{padding:11px;border-bottom:1px solid #edf1ee;font-size:10px;color:#526158}#ordersTable tr:hover td{background:#fbfcfb}.order-number{font-weight:800;color:#39785c!important}.status-badge{border-radius:20px;padding:5px 8px;font-size:9px}.status-badge.pending{background:#fff3da;color:#af7d29}.status-badge.preparing{background:#edf3fd;color:#6482ae}.status-badge.ready,.status-badge.completed{background:#e8f5ed;color:#278259}.action-buttons{display:flex;gap:4px}.action-buttons button{width:27px;height:27px;border:1px solid var(--o-line);border-radius:6px;background:#fff;color:#64756a;cursor:pointer}.action-buttons button:hover{background:#eaf4ed;color:var(--o-green)}.action-buttons .paid-btn{color:#fff;background:var(--o-green);border-color:var(--o-green)}.action-buttons .paid-btn[hidden]{display:none}.pagination,.footer{margin:11px 22px;color:var(--o-muted);font-size:10px}.footer{background:#fff;border:1px solid var(--o-line);border-radius:8px;padding:10px 13px}
+.modal-content{border-radius:12px}.empty-state{padding:30px;color:#7e8b82}
+@media(max-width:760px){.summary{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px 12px 8px}.orders-header{margin:10px 12px 0}.filters{margin:0 12px 10px;flex-wrap:wrap}.filters input:first-child{flex-basis:100%;min-width:0}.table-container{margin:0 12px}.footer,.pagination{margin-left:12px;margin-right:12px}}
+
+.status-badge.served{background:#e8f5ed;color:#278259}.status-badge.cancelled,.status-badge.refunded{background:#fdeceb;color:#b3524b}
+
+.item-note-detail{flex-basis:100%;color:#9a6c2c;font-size:9px;margin-top:4px}

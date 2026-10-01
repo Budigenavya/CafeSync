@@ -16,6 +16,39 @@ settings_bp = Blueprint(
     __name__
 )
 
+
+@settings_bp.route("/settings/billing-preferences", methods=["GET", "PUT"])
+def billing_preferences():
+    if request.method == "GET":
+        row = fetch_one("""
+            SELECT tax_percentage, default_discount, maximum_discount,
+                   allow_manual_discount, show_gst_on_receipt
+            FROM settings WHERE id=1
+        """)
+        if not row:
+            return jsonify({"success": False, "message": "Settings not found"}), 404
+        return jsonify({"success": True, "settings": dict(row)})
+
+    data = request.get_json(silent=True) or {}
+    try:
+        tax = float(data.get("tax_percentage", 5))
+        default_discount = float(data.get("default_discount", 0))
+        maximum_discount = float(data.get("maximum_discount", 30))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "Enter valid percentages."}), 400
+    if not all(0 <= value <= 100 for value in (tax, default_discount, maximum_discount)):
+        return jsonify({"success": False, "message": "Percentages must be between 0 and 100."}), 400
+    if default_discount > maximum_discount:
+        return jsonify({"success": False, "message": "Default discount cannot exceed the maximum."}), 400
+
+    execute_query("""
+        UPDATE settings SET tax_percentage=?, default_discount=?, maximum_discount=?,
+            allow_manual_discount=?, show_gst_on_receipt=? WHERE id=1
+    """, (tax, default_discount, maximum_discount,
+          1 if data.get("allow_manual_discount") else 0,
+          1 if data.get("show_gst_on_receipt", True) else 0))
+    return jsonify({"success": True, "message": "Billing preferences saved."})
+
 @settings_bp.route("/settings")
 @login_required
 def settings():
@@ -1060,12 +1093,7 @@ def import_settings():
 
     })
 
-settings_bp = Blueprint("settings",__name__)
 
-@settings_bp.route("/settings")
-def settings():
-
-    return render_template("settings.html")
 
 
 # ==========================================================

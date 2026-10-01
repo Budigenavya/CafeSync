@@ -2,6 +2,8 @@
 <html lang="en">
 
 <head>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#18372d">
 
 <meta charset="UTF-8">
 
@@ -10,13 +12,14 @@ content="width=device-width, initial-scale=1.0">
 
 <title>CafeSync | Orders</title>
 
-<link rel="stylesheet"
-href="css/orders.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/orders.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/menu.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/orders-pos.css') }}">
 
 <link rel="stylesheet"
 href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
-<script src="{{ url_for('static', filename='js/menu.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/menu.js') }}"></script>
 
 </head>
 
@@ -34,7 +37,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
                 HEADER
 ========================================== -->
 
-<header class="topbar">
+<header class="topbar orders-header">
 
     <div class="logo">
 
@@ -128,6 +131,8 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
         <option value="Ready">Ready</option>
 
+        <option value="Served">Served</option>
+
         <option value="Completed">Completed</option>
 
         <option value="Cancelled">Cancelled</option>
@@ -143,7 +148,18 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
         <option value="Card">Card</option>
 
         <option value="UPI">UPI</option>
+        <option value="Wallet">Wallet</option>
+        <option value="Paytm EDC">Paytm EDC</option>
+        <option value="Other">Other</option>
 
+    </select>
+
+    <select id="paymentStateFilter">
+        <option value="">Paid + Unpaid</option>
+        <option value="Pending">Unpaid</option>
+        <option value="Partial">Partially Paid</option>
+        <option value="Paid">Paid</option>
+        <option value="Refunded">Refunded</option>
     </select>
 
 </section>
@@ -427,8 +443,9 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 </footer>
 
 
-<script src="js/orders.js"></script>
+<script src="{{ url_for('static', filename='js/orders.js') }}"></script>
 
+<script src="/static/js/pwa.js" defer></script>
 </body>
 
 </html>
@@ -513,6 +530,16 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
             title="Print">
 
                 <i class="fa-solid fa-print"></i>
+
+            </button>
+
+            <button
+
+            class="paid-btn"
+
+            title="Mark payment as paid">
+
+                <i class="fa-solid fa-check"></i>
 
             </button>
 

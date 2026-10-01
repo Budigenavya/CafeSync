@@ -64,7 +64,8 @@ def get_kitchen_orders():
                 o.id,
                 o.bill_no,
                 o.table_id,
-                o.customer_id,
+                COALESCE(t.table_name, o.order_type, 'Takeaway') AS table_name,
+                COALESCE(c.name, 'Walk-in Customer') AS customer_name,
                 o.order_type,
                 o.subtotal,
                 o.gst,
@@ -72,9 +73,12 @@ def get_kitchen_orders():
                 o.total,
                 o.payment_method,
                 o.status,
-                o.created_at
+                o.created_at,
+                o.chef_notes
 
             FROM orders o
+            LEFT JOIN tables t ON t.id = o.table_id
+            LEFT JOIN customers c ON c.id = o.customer_id
 
             WHERE o.status IN (
                 'Pending',
@@ -95,7 +99,9 @@ def get_kitchen_orders():
                     oi.product_id,
                     p.name,
                     oi.quantity,
-                    oi.price
+                    oi.price,
+                    oi.chef_note,
+                    oi.addons
 
                 FROM order_items oi
 
@@ -116,6 +122,7 @@ def get_kitchen_orders():
 
             order_data["items"] = items
 
+            order_data["order_number"] = order_data.get("bill_no") or f"#{order_data['id']}"
             order_data["total_items"] = sum(
                 item["quantity"]
                 for item in items
@@ -123,12 +130,21 @@ def get_kitchen_orders():
 
             orders.append(order_data)
 
+        served_today = conn.execute("""
+            SELECT COUNT(*)
+            FROM orders
+            WHERE status='Served'
+              AND DATE(served_at,'localtime')=DATE('now','localtime')
+        """).fetchone()[0]
+
         conn.close()
 
-        return success(
-            "Kitchen Orders Loaded",
-            orders
-        )
+        return jsonify({
+            "success": True,
+            "message": "Kitchen Orders Loaded",
+            "data": orders,
+            "served_today": served_today
+        })
 
     except Exception as e:
 
@@ -157,6 +173,13 @@ def start_preparing(order_id):
 
         conn = get_connection()
         cursor = conn.cursor()
+
+        cursor.execute("SELECT status FROM orders WHERE id=?", (order_id,))
+        current = cursor.fetchone()
+        if not current:
+            return jsonify({"success": False, "message": "Order not found"}), 404
+        if current[0] != "Pending":
+            return jsonify({"success": False, "message": "Only pending orders can be started"}), 409
 
         cursor.execute("""
             UPDATE orders
@@ -241,6 +264,9 @@ def mark_ready(order_id):
             order[1]
         )
 
+        if order[1] != "Preparing":
+            return jsonify({"success": False, "message": "Only preparing orders can be marked ready"}), 409
+
         # Change status
         cursor.execute("""
             UPDATE orders
@@ -316,10 +342,13 @@ def serve_order(order_id):
 
         print("🔥 CURRENT STATUS:", order[1])
 
+        if order[1] != "Ready":
+            return jsonify({"success": False, "message": "Only ready orders can be served"}), 409
+
         # Mark order as served/completed
         cursor.execute("""
             UPDATE orders
-            SET status = 'Served'
+            SET status = 'Served', served_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (order_id,))
 
@@ -537,9 +566,9 @@ def kitchen_dashboard():
 
             FROM orders
 
-            WHERE status='Completed'
+            WHERE status='Served'
 
-            AND DATE(completed_at)=DATE('now')
+            AND DATE(served_at,'localtime')=DATE('now','localtime')
 
         """)
 
@@ -553,13 +582,13 @@ def kitchen_dashboard():
 
             SELECT
 
-                IFNULL(SUM(total),0) AS revenue
+                IFNULL(SUM(CASE WHEN payment_status='Paid' THEN total ELSE 0 END),0) AS revenue
 
             FROM orders
 
-            WHERE status='Completed'
+            WHERE status='Served'
 
-            AND DATE(completed_at)=DATE('now')
+            AND DATE(served_at,'localtime')=DATE('now','localtime')
 
         """)
 
@@ -575,7 +604,7 @@ def kitchen_dashboard():
 
             AVG(
 
-                JULIANDAY(completed_at)
+                JULIANDAY(served_at)
 
                 -
 
@@ -589,7 +618,7 @@ def kitchen_dashboard():
 
             WHERE
 
-                completed_at IS NOT NULL
+                served_at IS NOT NULL
 
         """)
 

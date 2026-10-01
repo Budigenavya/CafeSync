@@ -8,7 +8,8 @@
 // API
 //==========================================================
 
-const API = "http://127.0.0.1:5000";
+// Use same-origin URLs so POS works both locally and when deployed.
+const API = "";
 
 //==========================================================
 // GLOBAL VARIABLES
@@ -25,8 +26,18 @@ let selectedCategory = "All";
 let paymentMethod = "Cash";
 
 let gstPercentage = 5;
+let defaultDiscountPercentage = 0;
+let maximumDiscountPercentage = 30;
+let allowManualDiscount = false;
+let showGSTOnReceipt = true;
 
 let currentOrder = null;
+
+let selectedOrderType = "Dine In";
+
+let pendingAddonProduct = null;
+let pendingProductAddons = [];
+let heldOrdersCache = [];
 
 //==========================================================
 // DOM ELEMENTS
@@ -70,11 +81,105 @@ async function initializePOS(){
 
     initializeTheme();
 
+    await loadBillingPreferences();
+
     await loadCategories();
 
     await loadProducts();
 
+    await loadTables();
+
+    initializeOrderType();
+
     updateTotals();
+
+}
+
+async function loadBillingPreferences(){
+    try{
+        const response = await fetch(`${API}/settings/billing-preferences`, {credentials: "same-origin"});
+        if(!response.ok) return;
+        const result = await response.json();
+        if(!result.success) return;
+        const preferences = result.settings;
+        gstPercentage = Number(preferences.tax_percentage ?? 5);
+        defaultDiscountPercentage = Number(preferences.default_discount ?? 0);
+        maximumDiscountPercentage = Number(preferences.maximum_discount ?? 30);
+        allowManualDiscount = Boolean(preferences.allow_manual_discount);
+        showGSTOnReceipt = Boolean(preferences.show_gst_on_receipt);
+        const gstLabel = document.querySelector(".bill-summary .summary-row:nth-child(2) span:first-child");
+        if(gstLabel) gstLabel.textContent = `GST (${gstPercentage}%)`;
+        const input = document.getElementById("discount");
+        if(input){
+            input.value = defaultDiscountPercentage;
+            input.max = allowManualDiscount ? maximumDiscountPercentage : defaultDiscountPercentage;
+            input.disabled = !allowManualDiscount;
+            input.setAttribute("aria-label", "Discount percentage");
+        }
+    }catch(error){ console.warn("Billing settings could not be loaded", error); }
+}
+
+function getDiscountAmount(subtotal){
+    const input = document.getElementById("discount");
+    let percentage = Number(input?.value ?? defaultDiscountPercentage);
+    if(!allowManualDiscount) percentage = defaultDiscountPercentage;
+    percentage = Math.max(0, Math.min(percentage, maximumDiscountPercentage));
+    if(input && allowManualDiscount && Number(input.value) !== percentage) input.value = percentage;
+    return subtotal * percentage / 100;
+}
+
+async function loadTables(){
+
+    const selector = document.getElementById("tableNo");
+
+    if(!selector) return;
+
+    try{
+
+        const response = await fetch(`${API}/tables`);
+
+        if(!response.ok) return;
+
+        const tables = await response.json();
+
+        if(!Array.isArray(tables) || tables.length === 0) return;
+
+        selector.innerHTML = '<option value="">Choose a table</option>';
+
+        tables.forEach(table => {
+
+            const option = document.createElement("option");
+            option.value = table.id;
+            option.textContent = `${table.table_name}${table.status && table.status !== "Available" ? ` · ${table.status}` : ""}`;
+            option.disabled = table.status && table.status !== "Available";
+            selector.appendChild(option);
+
+        });
+
+    }catch(error){
+        console.warn("Table list unavailable", error);
+    }
+
+}
+
+function initializeOrderType(){
+
+    const buttons = document.querySelectorAll(".order-type-btn");
+    const selector = document.getElementById("tableNo");
+    const tableField = selector?.parentElement;
+
+    buttons.forEach(button => button.addEventListener("click", () => {
+
+        selectedOrderType = button.dataset.orderType || "Dine In";
+        buttons.forEach(item => item.classList.toggle("active", item === button));
+
+        if(tableField){
+            tableField.classList.toggle("table-hidden", selectedOrderType !== "Dine In");
+        }
+
+        if(selectedOrderType !== "Dine In" && selector) selector.value = "";
+
+    }));
 
 }
 
@@ -410,6 +515,8 @@ function renderCategories() {
 
 function renderProducts(productList){
 
+    productList = productList.filter(product => Number(product.is_available ?? 1) === 1);
+
     productGrid.innerHTML="";
 
     if(productList.length===0){
@@ -466,12 +573,6 @@ function renderProducts(productList){
 
                 </div>
 
-                <div class="stock">
-
-                    Stock : ${product.stock}
-
-                </div>
-
                 <button
                     class="add-btn">
 
@@ -490,7 +591,7 @@ function renderProducts(productList){
 
                 e.stopPropagation();
 
-                addToCart(product);
+                selectProductAddons(product);
 
             });
 
@@ -532,9 +633,76 @@ searchInput.addEventListener("keyup",function(){
 // ADD TO CART
 //==========================================================
 
-function addToCart(product){
+async function selectProductAddons(product){
+    try {
+        const response = await fetch(`${API}/inventory/products/${product.id}/addons`, {credentials:"same-origin"});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not load item add-ons");
+        const addons = result.data || [];
+        if (!addons.length) {
+            addToCart(product, []);
+            return;
+        }
+        pendingAddonProduct = product;
+        pendingProductAddons = addons;
+        document.getElementById("addonPickerTitle").textContent = product.name;
+        document.getElementById("addonPickerBasePrice").textContent = `Base price · ₹${Number(product.price).toFixed(2)}`;
+        const list = document.getElementById("addonChoices");
+        list.replaceChildren();
+        addons.forEach(addon => {
+            const label = document.createElement("label");
+            label.className = "addon-choice";
+            const check = document.createElement("input");
+            check.type = "checkbox";
+            check.value = addon.id;
+            check.addEventListener("change", updateAddonPickerTotal);
+            const name = document.createElement("span");
+            name.textContent = addon.name;
+            const price = document.createElement("b");
+            price.textContent = `+₹${Number(addon.price).toFixed(2)}`;
+            label.append(check, name, price);
+            list.appendChild(label);
+        });
+        updateAddonPickerTotal();
+        document.getElementById("addonPickerModal").classList.add("active");
+        document.getElementById("addonPickerModal").setAttribute("aria-hidden", "false");
+    } catch (error) {
+        showToast(error.message || "Could not load item add-ons", "error");
+    }
+}
 
-    const existing=cart.find(item=>item.id===product.id);
+function updateAddonPickerTotal(){
+    const selectedIds = new Set([...document.querySelectorAll("#addonChoices input:checked")].map(input => Number(input.value)));
+    const extra = pendingProductAddons.filter(addon => selectedIds.has(Number(addon.id))).reduce((sum, addon) => sum + Number(addon.price), 0);
+    document.getElementById("addonPickerTotal").textContent = `Item total · ₹${(Number(pendingAddonProduct?.price || 0) + extra).toFixed(2)}`;
+}
+
+function closeAddonPicker(){
+    document.getElementById("addonPickerModal").classList.remove("active");
+    document.getElementById("addonPickerModal").setAttribute("aria-hidden", "true");
+    pendingAddonProduct = null;
+    pendingProductAddons = [];
+}
+
+document.getElementById("closeAddonPicker")?.addEventListener("click", closeAddonPicker);
+document.getElementById("confirmAddons")?.addEventListener("click", () => {
+    if (!pendingAddonProduct) return;
+    const selectedIds = new Set([...document.querySelectorAll("#addonChoices input:checked")].map(input => Number(input.value)));
+    const selected = pendingProductAddons.filter(addon => selectedIds.has(Number(addon.id)));
+    const product = pendingAddonProduct;
+    closeAddonPicker();
+    addToCart(product, selected);
+});
+
+function cartLineKey(item){
+    return item.line_key || `${item.id}:base`;
+}
+
+function addToCart(product, selectedAddons=[]){
+
+    const addonIds = selectedAddons.map(addon => Number(addon.id)).sort((a,b) => a-b);
+    const lineKey = `${product.id}:${addonIds.length ? addonIds.join(".") : "base"}`;
+    const existing=cart.find(item=>cartLineKey(item)===lineKey);
 
     if(existing){
 
@@ -548,11 +716,19 @@ function addToCart(product){
 
             id:product.id,
 
+            line_key:lineKey,
+
             name:product.name,
 
-            price:Number(product.price),
+            base_price:Number(product.price),
+
+            price:Number(product.price) + selectedAddons.reduce((sum, addon) => sum + Number(addon.price), 0),
+
+            addons:selectedAddons.map(addon => ({id:Number(addon.id), name:addon.name, price:Number(addon.price)})),
 
             image:product.image,
+
+            chef_note:"",
 
             quantity:1
 
@@ -630,6 +806,11 @@ function renderCart() {
 
                     </div>
 
+                    <div class="cart-addons"></div>
+
+                    <button type="button" class="customize-toggle">Add kitchen note</button>
+                    <textarea class="item-note" maxlength="180" placeholder="e.g. no sugar, oat milk" hidden></textarea>
+
                 </div>
 
             </div>
@@ -639,7 +820,7 @@ function renderCart() {
                 <div class="quantity">
 
                     <button
-                        onclick="decreaseQuantity(${item.id})">
+                        onclick="decreaseQuantity('${cartLineKey(item)}')">
 
                         -
 
@@ -652,7 +833,7 @@ function renderCart() {
                     </span>
 
                     <button
-                        onclick="increaseQuantity(${item.id})">
+                        onclick="increaseQuantity('${cartLineKey(item)}')">
 
                         +
 
@@ -672,7 +853,7 @@ function renderCart() {
 
                 <button
                     class="remove-item"
-                    onclick="removeItem(${item.id})">
+                    onclick="removeItem('${cartLineKey(item)}')">
 
                     <i class="fas fa-trash"></i>
 
@@ -681,6 +862,22 @@ function renderCart() {
             </div>
 
         `;
+
+        const noteInput = cartCard.querySelector(".item-note");
+        const noteToggle = cartCard.querySelector(".customize-toggle");
+        const addonSummary = cartCard.querySelector(".cart-addons");
+        addonSummary.textContent = (item.addons || []).map(addon => addon.name).join(", ");
+        addonSummary.hidden = !(item.addons || []).length;
+        noteInput.value = item.chef_note || "";
+        noteToggle.textContent = item.chef_note ? "Edit kitchen note" : "Add kitchen note";
+        noteToggle.addEventListener("click", () => {
+            noteInput.hidden = !noteInput.hidden;
+            if (!noteInput.hidden) noteInput.focus();
+        });
+        noteInput.addEventListener("input", () => {
+            item.chef_note = noteInput.value.trim();
+            noteToggle.textContent = item.chef_note ? "Edit kitchen note" : "Add kitchen note";
+        });
 
         cartItems.appendChild(cartCard);
 
@@ -694,7 +891,7 @@ function renderCart() {
 
 function increaseQuantity(id){
 
-    const item = cart.find(p => p.id === id);
+    const item = cart.find(p => cartLineKey(p) === String(id));
 
     if(!item) return;
 
@@ -712,7 +909,7 @@ function increaseQuantity(id){
 
 function decreaseQuantity(id){
 
-    const item = cart.find(p => p.id === id);
+    const item = cart.find(p => cartLineKey(p) === String(id));
 
     if(!item) return;
 
@@ -720,7 +917,7 @@ function decreaseQuantity(id){
 
     if(item.quantity <= 0){
 
-        cart = cart.filter(p => p.id !== id);
+        cart = cart.filter(p => cartLineKey(p) !== String(id));
 
     }
 
@@ -736,7 +933,7 @@ function decreaseQuantity(id){
 
 function removeItem(id){
 
-    cart = cart.filter(item => item.id !== id);
+    cart = cart.filter(item => cartLineKey(item) !== String(id));
 
     renderCart();
 
@@ -840,8 +1037,7 @@ function updateTotals() {
 
     const discountInput = document.getElementById("discount");
 
-    const discount =
-        Number(discountInput?.value || 0);
+    const discount = getDiscountAmount(subtotal);
 
     const gst =
         subtotal * gstPercentage / 100;
@@ -851,6 +1047,9 @@ function updateTotals() {
 
     document.getElementById("subtotal").innerHTML =
         "₹" + subtotal.toFixed(2);
+
+    const discountAmountElement = document.getElementById("discountAmount");
+    if(discountAmountElement) discountAmountElement.textContent = "₹" + discount.toFixed(2);
 
     document.getElementById("gstAmount").innerHTML =
         "₹" + gst.toFixed(2);
@@ -882,7 +1081,7 @@ if(discountBox){
 //==========================================================
 
 document
-.querySelectorAll(".payment-btn")
+.querySelectorAll(".payment-btn[data-payment]")
 .forEach(btn=>{
 
     btn.addEventListener("click",()=>{
@@ -917,7 +1116,7 @@ checkoutBtn.addEventListener("click",checkout);
 
 }
 
-async function checkout(){
+async function checkout(options={}){
 
     if(cart.length===0){
 
@@ -930,6 +1129,8 @@ async function checkout(){
 
     }
 
+    const printWindow = options.printAfter ? window.open("", "_blank") : null;
+
     let subtotal=0;
 
     cart.forEach(item=>{
@@ -939,12 +1140,7 @@ async function checkout(){
 
     });
 
-    const discount=
-    Number(
-        document
-        .getElementById("discount")
-        .value
-    );
+    const discount=getDiscountAmount(subtotal);
 
     const gst=
     subtotal*gstPercentage/100;
@@ -969,8 +1165,19 @@ async function checkout(){
         table:
         document.getElementById("tableNo").value,
 
+        table_id:
+        document.getElementById("tableNo").value || null,
+
+        order_type: selectedOrderType,
+
         customer:
-        document.getElementById("customerName").value
+        document.getElementById("customerName").value,
+
+        customer_id: customerInput?.dataset.customerId || null,
+
+        is_paid: options.splitOrder ? false : (document.getElementById("isPaid")?.checked || false),
+
+        split_details: options.splitOrder?.details || null
 
     };
 
@@ -1002,11 +1209,46 @@ async function checkout(){
 
         if(data.success){
 
-            showToast(
-                "Bill Saved Successfully"
-            );
+            let splitPaymentSaved = true;
+            if(options.splitOrder){
+                try{
+                    const paymentResponse = await fetch(`${API}/billing/split-payment/${data.order_id}`, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        credentials: "same-origin",
+                        body: JSON.stringify({shares: options.splitOrder.payments})
+                    });
+                    const paymentResult = await paymentResponse.json();
+                    if(!paymentResponse.ok || !paymentResult.success) throw new Error(paymentResult.message || "Payment failed");
+                }catch(paymentError){
+                    splitPaymentSaved = false;
+                    console.error("Split payments could not be recorded", paymentError);
+                }
+            }
+
+            if(data.bill_no){
+                document.getElementById("billNo").textContent = data.bill_no;
+            }
+
+            if(printWindow){
+                printWindow.document.write(generateReceiptHTML());
+                printWindow.document.close();
+                printWindow.focus();
+                printWindow.print();
+            }
+
+            const splitMessage = !options.splitOrder
+                ? "Bill Saved Successfully"
+                : !splitPaymentSaved
+                    ? "Order saved, but split payments were not recorded. Check the order before retrying."
+                    : options.splitOrder.payments.length
+                        ? "Bill saved with split payments"
+                        : "Split order saved as unpaid";
+            showToast(splitMessage, splitPaymentSaved ? undefined : "error");
 
             cart=[];
+
+            clearLocalData();
 
             renderCart();
 
@@ -1015,6 +1257,8 @@ async function checkout(){
         }
 
         else{
+
+            if(printWindow) printWindow.close();
 
             showToast(
 
@@ -1029,6 +1273,8 @@ async function checkout(){
     }
 
     catch(err){
+
+        if(printWindow) printWindow.close();
 
         console.error(err);
 
@@ -1052,34 +1298,11 @@ const holdBtn=
 document.getElementById("holdOrder");
 
 if(holdBtn){
-
-holdBtn.addEventListener("click",()=>{
-
-    if(cart.length===0){
-
-        showToast(
-
-            "Nothing to Hold",
-
-            "warning"
-
-        );
-
-        return;
-
-    }
-
-    currentOrder=[...cart];
-
-    showToast(
-
-        "Order Held"
-
-    );
-
-});
+    holdBtn.addEventListener("click", holdCurrentOrder);
 
 }
+
+document.getElementById("holdOrderBottom")?.addEventListener("click", holdCurrentOrder);
 
 //==========================================================
 // PRINT BILL
@@ -1087,16 +1310,6 @@ holdBtn.addEventListener("click",()=>{
 
 const printBtn=
 document.getElementById("printBtn");
-
-if(printBtn){
-
-printBtn.addEventListener("click",()=>{
-
-    window.print();
-
-});
-
-}
 
 //==========================================================
 // KOT
@@ -1120,6 +1333,8 @@ if (kotBtn) {
 
             return;
         }
+
+        const kotPrintWindow = window.open("", "_blank");
 
 
         // ------------------------------------------
@@ -1160,11 +1375,9 @@ if (kotBtn) {
     	    0
 	);
 
-	// 5% GST
-	const gstValue = subtotalValue * 0.05;
+	const gstValue = subtotalValue * gstPercentage / 100;
 
-	// No discount for now
-	const discountValue = 0;
+	const discountValue = getDiscountAmount(subtotalValue);
 
 	const grandTotalValue =
     	    subtotalValue +
@@ -1178,14 +1391,13 @@ if (kotBtn) {
 
 	const data = {
 
-    	    table_id: tableId,
+            table_id: tableId,
 
             customer_name: customerName,
 
-    	    order_type:
-        	tableId
-            	? "Dine In"
-            	: "Take Away",
+            customer_id: customerInput?.dataset.customerId || null,
+
+	    order_type: selectedOrderType,
 
     	    subtotal: subtotalValue,
 
@@ -1203,7 +1415,11 @@ if (kotBtn) {
 
         	quantity: Number(item.quantity),
 
-        	price: Number(item.price)
+                price: Number(item.price),
+
+                chef_note: item.chef_note || "",
+
+                addons: (item.addons || []).map(addon => addon.id)
 
     	    }))
 
@@ -1253,6 +1469,20 @@ if (kotBtn) {
 
             if (result.success) {
 
+                if(result.data?.bill_no){
+                    document.getElementById("billNo").textContent = result.data.bill_no;
+                }
+
+                if(kotPrintWindow){
+                    const ticket = generateReceiptHTML()
+                        .replace("<title>Invoice</title>", "<title>Kitchen Ticket</title>")
+                        .replace("<h2>CafeSync POS</h2>", "<h2>CafeSync Kitchen Ticket</h2>");
+                    kotPrintWindow.document.write(ticket);
+                    kotPrintWindow.document.close();
+                    kotPrintWindow.focus();
+                    kotPrintWindow.print();
+                }
+
                 showToast(
                     "Kitchen Order Sent",
                     "success"
@@ -1268,9 +1498,16 @@ if (kotBtn) {
                     result.data.bill_no
                 );
 
+                cart=[];
+                clearLocalData();
+                renderCart();
+                updateTotals();
+
             }
 
             else {
+
+                if(kotPrintWindow) kotPrintWindow.close();
 
                 showToast(
                     result.message ||
@@ -1283,6 +1520,8 @@ if (kotBtn) {
         }
 
         catch (error) {
+
+            if(kotPrintWindow) kotPrintWindow.close();
 
             console.error(
                 "🔥 KOT ERROR:",
@@ -1434,13 +1673,7 @@ function searchBarcode(code){
 
     if(product){
 
-        addToCart(product);
-
-        showToast(
-
-            product.name+" Added"
-
-        );
+        selectProductAddons(product);
 
     }
 
@@ -1522,52 +1755,73 @@ document.getElementById(
 
 );
 
-if(customerInput){
+const customerSuggestions = document.getElementById("customerSuggestions");
+let customerSearchTimer = null;
+let customerSearchController = null;
 
-customerInput.addEventListener(
-
-"keyup",
-
-async function(){
-
-    if(this.value.length<3)
-
+async function searchCustomerSuggestions(){
+    const query = customerInput?.value.trim() || "";
+    if(query.length < 2){
+        customerSuggestions.hidden = true;
+        customerSuggestions.replaceChildren();
         return;
-
+    }
+    if(customerSearchController) customerSearchController.abort();
+    customerSearchController = new AbortController();
     try{
-
-        const response=
-
-        await fetch(
-
-        API+
-
-        "/customers/search?name="+
-
-        this.value
-
-        );
-
-        if(!response.ok)
-
-            return;
-
-        const data=
-
-        await response.json();
-
-        console.log(data);
-
+        const response = await fetch(`${API}/billing/customers/search?q=${encodeURIComponent(query)}`, {
+            credentials: "same-origin", signal: customerSearchController.signal
+        });
+        if(!response.ok) return;
+        const result = await response.json();
+        customerSuggestions.replaceChildren();
+        (result.customers || []).forEach(customer => {
+            const option = document.createElement("div");
+            option.className = "customer-suggestion";
+            option.tabIndex = 0;
+            const details = document.createElement("span");
+            const name = document.createElement("strong");
+            name.textContent = customer.name || "Customer";
+            const contact = document.createElement("small");
+            contact.textContent = [customer.phone, customer.email].filter(Boolean).join(" · ") || "No contact details";
+            details.append(name, contact);
+            const points = document.createElement("span");
+            points.className = "customer-points";
+            points.textContent = `${Number(customer.points || 0)} pts · ${Number(customer.visit_count || 0)} visits`;
+            option.append(details, points);
+            const choose = event => {
+                event.preventDefault();
+                customerInput.value = customer.name || "";
+                customerInput.dataset.customerId = customer.id;
+                customerSuggestions.hidden = true;
+                customerSuggestions.replaceChildren();
+                saveCustomer();
+            };
+            option.addEventListener("mousedown", choose);
+            option.addEventListener("keydown", event => {
+                if(event.key === "Enter" || event.key === " ") choose(event);
+            });
+            customerSuggestions.appendChild(option);
+        });
+        customerSuggestions.hidden = customerSuggestions.childElementCount === 0;
+    }catch(error){
+        if(error.name !== "AbortError") console.warn("Customer search failed", error);
     }
+}
 
-    catch(err){
-
-        console.log(err);
-
-    }
-
-});
-
+if(customerInput){
+    customerInput.addEventListener("input", () => {
+        delete customerInput.dataset.customerId;
+        clearTimeout(customerSearchTimer);
+        customerSearchTimer = setTimeout(searchCustomerSuggestions, 180);
+    });
+    customerInput.addEventListener("focus", searchCustomerSuggestions);
+    customerInput.addEventListener("keydown", event => {
+        if(event.key === "Escape") customerSuggestions.hidden = true;
+    });
+    document.addEventListener("click", event => {
+        if(!event.target.closest(".customer-field")) customerSuggestions.hidden = true;
+    });
 }
 
 //==========================================================
@@ -1969,6 +2223,20 @@ function checkoutSuccess(){
 // RECEIPT HTML
 //==========================================================
 
+function escapeReceiptText(value){
+    return String(value ?? "").replace(/[&<>\"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+    })[char]);
+}
+
+function getItemAddonNames(item){
+    let addons = item?.addons || [];
+    if (typeof addons === "string") {
+        try { addons = JSON.parse(addons); } catch { addons = []; }
+    }
+    return Array.isArray(addons) ? addons.map(addon => typeof addon === "string" ? addon : addon.name).filter(Boolean) : [];
+}
+
 function generateReceiptHTML(){
 
     let itemsHTML="";
@@ -1983,7 +2251,7 @@ function generateReceiptHTML(){
 
         <tr>
 
-            <td>${item.name}</td>
+            <td>${escapeReceiptText(item.name)}${getItemAddonNames(item).length ? `<br><small>Extras: ${escapeReceiptText(getItemAddonNames(item).join(", "))}</small>` : ""}${item.chef_note ? `<br><small>Note: ${escapeReceiptText(item.chef_note)}</small>` : ""}</td>
 
             <td>${item.quantity}</td>
 
@@ -1997,8 +2265,7 @@ function generateReceiptHTML(){
 
     });
 
-    const discount=
-    Number(document.getElementById("discount").value||0);
+    const discount=getDiscountAmount(subtotal);
 
     const gst=
     subtotal*gstPercentage/100;
@@ -2118,7 +2385,7 @@ function generateReceiptHTML(){
 
             <p>Subtotal : ₹${subtotal.toFixed(2)}</p>
 
-            <p>GST : ₹${gst.toFixed(2)}</p>
+            ${showGSTOnReceipt ? `<p>GST (${gstPercentage}%) : ₹${gst.toFixed(2)}</p>` : ""}
 
             <p>Discount : ₹${discount.toFixed(2)}</p>
 
@@ -2216,9 +2483,7 @@ function printReceipt(){
 //==========================================================
 
 if(printBtn){
-
-    printBtn.onclick=printReceipt;
-
+    printBtn.onclick=()=>cart.length ? printReceipt() : (location.href="/orders");
 }
 
 //==========================================================
@@ -2686,6 +2951,124 @@ function updateCustomerPoints(total){
 
 }
 
+// Screenshot-inspired counter workflow controls.
+document.getElementById("saveBillBtn")?.addEventListener("click", () => checkout());
+document.getElementById("savePrintBtn")?.addEventListener("click", () => checkout({printAfter:true}));
+
+document.getElementById("newOrderBtn")?.addEventListener("click", () => {
+    if(cart.length && !confirm("Start a new order? The current cart will be cleared.")) return;
+    cart = [];
+    document.getElementById("customerName").value = "";
+    delete document.getElementById("customerName").dataset.customerId;
+    document.getElementById("tableNo").value = "";
+    document.getElementById("discount").value = defaultDiscountPercentage;
+    document.getElementById("isPaid").checked = false;
+    selectedOrderType = "Dine In";
+    paymentMethod = "Cash";
+    document.querySelectorAll(".order-type-btn").forEach(b => b.classList.toggle("active", b.dataset.orderType === selectedOrderType));
+    document.querySelectorAll(".payment-btn[data-payment]").forEach(b => b.classList.toggle("active", b.dataset.payment === paymentMethod));
+    document.getElementById("tableNo").parentElement.classList.remove("table-hidden");
+    clearLocalData();
+    renderCart();
+    updateTotals();
+    generateBillNo();
+});
+
+document.getElementById("morePaymentToggle")?.addEventListener("click", () => {
+    const options = document.getElementById("morePaymentOptions");
+    options.hidden = !options.hidden;
+});
+
+document.getElementById("logoutPos")?.addEventListener("click", async () => {
+    await fetch("/logout", {method:"POST", credentials:"same-origin"});
+    location.href = "/login";
+});
+
+const lookupModal = document.getElementById("lookupModal");
+async function lookupTicket(inputId){
+    const query = document.getElementById(inputId).value.trim();
+    if(!query){ showToast("Enter a bill or KOT number", "warning"); return; }
+    try{
+        const response = await fetch(`${API}/billing/lookup?q=${encodeURIComponent(query)}`, {credentials:"same-origin"});
+        const result = await response.json();
+        if(!response.ok || !result.success){ showToast(result.message || "Order not found", "error"); return; }
+        const order = result.data;
+        const details = document.getElementById("lookupDetails");
+        details.replaceChildren();
+        const facts = document.createElement("p");
+        facts.className = "lookup-facts";
+        facts.textContent = `${order.bill_no} · ${order.table_name || order.order_type || "Takeaway"} · ${order.status} · ₹${Number(order.total || 0).toFixed(2)}`;
+        details.appendChild(facts);
+        const list = document.createElement("ul");
+        (order.items || []).forEach(item => {
+            const li = document.createElement("li");
+            const addonNames = getItemAddonNames(item);
+            li.textContent = `${item.quantity} × ${item.name}${addonNames.length ? ` · ${addonNames.join(", ")}` : ""}${item.chef_note ? ` · Note: ${item.chef_note}` : ""}`;
+            list.appendChild(li);
+        });
+        details.appendChild(list);
+        lookupModal.classList.add("open");
+        lookupModal.setAttribute("aria-hidden", "false");
+    }catch(error){ console.error(error); showToast("Could not look up this order", "error"); }
+}
+
+document.querySelectorAll("[data-lookup]").forEach(button => button.addEventListener("click", () => lookupTicket(button.dataset.lookup)));
+[["billLookup","billLookup"],["kotLookup","kotLookup"]].forEach(([id,key]) => document.getElementById(id)?.addEventListener("keydown", e => { if(e.key === "Enter") lookupTicket(key); }));
+document.getElementById("closeLookup")?.addEventListener("click", () => { lookupModal.classList.remove("open"); lookupModal.setAttribute("aria-hidden", "true"); });
+lookupModal?.addEventListener("click", e => { if(e.target === lookupModal) document.getElementById("closeLookup").click(); });
+
+const itemsModal = document.getElementById("itemsModal");
+function renderAvailabilityList(){
+    const host = document.getElementById("availabilityList");
+    host.replaceChildren();
+    if(!products.length){ host.textContent = "No menu items found."; return; }
+    products.forEach(product => {
+        const row = document.createElement("div"); row.className = "availability-row";
+        const name = document.createElement("span"); name.className = "availability-name";
+        name.textContent = product.name;
+        const price = document.createElement("small"); price.textContent = `₹${Number(product.price).toFixed(2)}`; name.appendChild(price);
+        const toggle = document.createElement("button");
+        const available = Number(product.is_available ?? 1) === 1;
+        toggle.className = `availability-toggle${available ? " is-on" : ""}`;
+        toggle.type = "button"; toggle.setAttribute("aria-pressed", String(available));
+        toggle.innerHTML = `<i class="fas ${available ? "fa-toggle-on" : "fa-toggle-off"}"></i> ${available ? "On" : "Off"}`;
+        toggle.addEventListener("click", async () => {
+            toggle.disabled = true;
+            try{
+                const response = await fetch(`${API}/inventory/products/${product.id}/availability`, {
+                    method:"PUT", credentials:"same-origin", headers:{"Content-Type":"application/json"},
+                    body:JSON.stringify({is_available:!available})
+                });
+                const result = await response.json();
+                if(!response.ok || !result.success) throw new Error(result.message || "Update failed");
+                product.is_available = available ? 0 : 1;
+                renderProducts(products.filter(p => Number(p.is_available ?? 1) === 1));
+                renderAvailabilityList();
+            }catch(error){ showToast(error.message, "error"); toggle.disabled = false; }
+        });
+        row.append(name,toggle); host.appendChild(row);
+    });
+}
+document.getElementById("itemsAvailabilityBtn")?.addEventListener("click", () => {
+    renderAvailabilityList(); itemsModal.classList.add("open"); itemsModal.setAttribute("aria-hidden", "false");
+});
+document.getElementById("closeItemsModal")?.addEventListener("click", () => { itemsModal.classList.remove("open"); itemsModal.setAttribute("aria-hidden", "true"); });
+itemsModal?.addEventListener("click", e => { if(e.target === itemsModal) document.getElementById("closeItemsModal").click(); });
+
+document.addEventListener("keydown", e => {
+    if(e.key === "Escape"){
+        document.querySelectorAll(".lookup-modal.open").forEach(modal => {
+            modal.classList.remove("open"); modal.setAttribute("aria-hidden", "true");
+        });
+    }
+    if(e.key === "/" && !["INPUT","TEXTAREA"].includes(document.activeElement?.tagName)){
+        e.preventDefault(); searchInput?.focus();
+    }
+    if(e.key === "F2"){
+        e.preventDefault(); document.getElementById("newOrderBtn")?.click();
+    }
+});
+
 //==========================================================
 // QR PAYMENT
 //==========================================================
@@ -2828,199 +3211,124 @@ function finishOrder(total){
 // HOLD ORDER
 //==========================================================
 
-function holdCurrentOrder(){
-
+async function holdCurrentOrder(){
     if(cart.length===0){
-
-        showToast(
-
-            "Cart Empty",
-
-            "warning"
-
-        );
-
+        showToast("Cart Empty", "warning");
         return;
-
     }
-
-    let orders=
-
-    JSON.parse(
-
-        localStorage.getItem(
-
-        "held_orders"
-
-        ) || "[]"
-
-    );
-
-    const order={
-
-        id:Date.now(),
-
-        customer:
-
-        document.getElementById(
-
-        "customerName"
-
-        ).value,
-
-        table:
-
-        document.getElementById(
-
-        "tableNo"
-
-        ).value,
-
-        payment:paymentMethod,
-
-        cart:[...cart],
-
-        date:new Date()
-
-        .toLocaleString()
-
-    };
-
-    orders.push(order);
-
-    localStorage.setItem(
-
-        "held_orders",
-
-        JSON.stringify(orders)
-
-    );
-
+    try{
+        const response = await fetch(`${API}/billing/held-orders`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            credentials: "same-origin",
+            body: JSON.stringify({
+                customer: document.getElementById("customerName").value,
+                customer_id: document.getElementById("customerName").dataset.customerId || null,
+                table_id: document.getElementById("tableNo").value || null,
+                order_type: selectedOrderType,
+                payment_method: paymentMethod,
+                is_paid: document.getElementById("isPaid")?.checked || false,
+                items: cart
+            })
+        });
+        const result = await response.json();
+        if(!response.ok || !result.success) throw new Error(result.message || "Could not hold order");
+    }catch(error){
+        console.error("Could not hold order", error);
+        showToast("Could not save the held order. Your cart is still open.", "error");
+        return;
+    }
     cart=[];
-
+    clearLocalData();
     renderCart();
-
     updateTotals();
-
-    showToast(
-
-        "Order Held"
-
-    );
-
+    showToast("Order Held");
     loadHeldOrders();
-
 }
 
 //==========================================================
 // LOAD HOLD ORDERS
 //==========================================================
 
-function loadHeldOrders(){
-
-    const container=
-
-    document.getElementById(
-
-    "heldOrders"
-
-    );
-
-    if(!container)
-
+async function loadHeldOrders(){
+    const container = document.getElementById("heldOrders");
+    if(!container) return;
+    container.innerHTML = "";
+    try{
+        const response = await fetch(`${API}/billing/held-orders`, {credentials: "same-origin"});
+        if(!response.ok) throw new Error("Held orders unavailable");
+        const result = await response.json();
+        heldOrdersCache = result.orders || [];
+    }catch(error){
+        console.error(error);
+        container.textContent = "Held orders unavailable";
         return;
+    }
 
-    container.innerHTML="";
+    // Migrate orders saved by older POS versions in this browser.
+    let legacy = [];
+    try{ legacy = JSON.parse(localStorage.getItem("held_orders") || "[]"); }catch{}
+    const remainingLegacy = [];
+    for(const oldOrder of legacy){
+        try{
+            const response = await fetch(`${API}/billing/held-orders`, {
+                method: "POST", headers: {"Content-Type": "application/json"}, credentials: "same-origin",
+                body: JSON.stringify({customer: oldOrder.customer, table_id: oldOrder.table,
+                    order_type: oldOrder.orderType, payment_method: oldOrder.payment,
+                    is_paid: oldOrder.isPaid, items: oldOrder.cart})
+            });
+            const result = await response.json();
+            if(!response.ok || !result.success) throw new Error(result.message || "Migration failed");
+            heldOrdersCache.unshift(result.order);
+        }catch(error){
+            console.warn("A locally held order could not be migrated", error);
+            remainingLegacy.push(oldOrder);
+        }
+    }
+    localStorage.setItem("held_orders", JSON.stringify(remainingLegacy));
 
-    const orders=
-
-    JSON.parse(
-
-        localStorage.getItem(
-
-        "held_orders"
-
-        ) || "[]"
-
-    );
-
-    orders.forEach(order=>{
-
-        const card=
-
-        document.createElement("div");
-
-        card.className="hold-card";
-
-        card.innerHTML=`
-
-        <h4>
-
-        Table :
-
-        ${order.table}
-
-        </h4>
-
-        <p>
-
-        ${order.customer||"Walk-in"}
-
-        </p>
-
-        <small>
-
-        ${order.date}
-
-        </small>
-
-        <button
-
-        onclick="resumeOrder(${order.id})">
-
-        Resume
-
-        </button>
-
-        `;
-
+    heldOrdersCache.forEach(order=>{
+        const card = document.createElement("div");
+        card.className = "hold-card";
+        const tableOption = Array.from(document.getElementById("tableNo")?.options || [])
+            .find(option => String(option.value) === String(order.table_id));
+        const title = document.createElement("h4");
+        title.textContent = order.table_id ? `Table: ${tableOption?.textContent || order.table_id}` : (order.order_type || "Take Away");
+        const customer = document.createElement("p");
+        customer.textContent = order.customer || "Walk-in";
+        const date = document.createElement("small");
+        date.textContent = new Date(String(order.created_at).replace(" ", "T") + "Z").toLocaleString();
+        const resume = document.createElement("button");
+        resume.textContent = "Resume";
+        resume.addEventListener("click", () => resumeOrder(order.id));
+        const discard = document.createElement("button");
+        discard.textContent = "Discard";
+        discard.addEventListener("click", () => deleteHeldOrder(order.id));
+        card.append(title, customer, date, resume, discard);
         container.appendChild(card);
-
     });
-
 }
 
 //==========================================================
 // RESUME ORDER
 //==========================================================
 
-function resumeOrder(id){
-
-    let orders=
-
-    JSON.parse(
-
-        localStorage.getItem(
-
-        "held_orders"
-
-        ) || "[]"
-
-    );
-
-    const order=
-
-    orders.find(
-
-        o=>o.id===id
-
-    );
-
-    if(!order)
-
+async function resumeOrder(id){
+    const order = heldOrdersCache.find(item => Number(item.id) === Number(id));
+    if(!order) return;
+    try{
+        const response = await fetch(`${API}/billing/held-orders/${id}`, {method: "DELETE", credentials: "same-origin"});
+        const result = await response.json();
+        if(!response.ok || !result.success) throw new Error(result.message || "Could not resume held order");
+    }catch(error){
+        showToast("Could not resume held order. It remains saved.", "error");
         return;
-
-    cart=order.cart;
+    }
+    cart=order.items;
+    selectedOrderType = order.order_type || (order.table_id ? "Dine In" : "Parcel");
+    document.querySelectorAll(".order-type-btn").forEach(b => b.classList.toggle("active", b.dataset.orderType === selectedOrderType));
+    document.getElementById("isPaid").checked = !!order.is_paid;
+    document.getElementById("tableNo").parentElement.classList.toggle("table-hidden", selectedOrderType !== "Dine In");
 
     document.getElementById(
 
@@ -3030,33 +3338,25 @@ function resumeOrder(id){
 
     order.customer;
 
+    if(order.customer_id) document.getElementById("customerName").dataset.customerId = order.customer_id;
+
     document.getElementById(
 
     "tableNo"
 
     ).value=
 
-    order.table;
+    order.table_id || "";
+
+    paymentMethod = order.payment_method || "Cash";
+    document.querySelectorAll(".payment-btn[data-payment]").forEach(button => button.classList.toggle("active", button.dataset.payment === paymentMethod));
 
     renderCart();
 
     updateTotals();
 
-    orders=
-
-    orders.filter(
-
-        o=>o.id!==id
-
-    );
-
-    localStorage.setItem(
-
-        "held_orders",
-
-        JSON.stringify(orders)
-
-    );
+    saveCart();
+    heldOrdersCache = heldOrdersCache.filter(item => Number(item.id) !== Number(id));
 
     loadHeldOrders();
 
@@ -3066,38 +3366,14 @@ function resumeOrder(id){
 // DELETE HOLD ORDER
 //==========================================================
 
-function deleteHeldOrder(id){
-
-    let orders=
-
-    JSON.parse(
-
-        localStorage.getItem(
-
-        "held_orders"
-
-        ) || "[]"
-
-    );
-
-    orders=
-
-    orders.filter(
-
-        o=>o.id!==id
-
-    );
-
-    localStorage.setItem(
-
-        "held_orders",
-
-        JSON.stringify(orders)
-
-    );
-
-    loadHeldOrders();
-
+async function deleteHeldOrder(id){
+    try{
+        const response = await fetch(`${API}/billing/held-orders/${id}`, {method: "DELETE", credentials: "same-origin"});
+        const result = await response.json();
+        if(!response.ok || !result.success) throw new Error(result.message || "Delete failed");
+        heldOrdersCache = heldOrdersCache.filter(item => Number(item.id) !== Number(id));
+        loadHeldOrders();
+    }catch(error){ showToast("Could not discard held order", "error"); }
 }
 
 //==========================================================
@@ -3149,52 +3425,14 @@ function splitBill(){
 
     );
 
-    if(!people || people<1){
+    if(!people || people<1 || people>30){
+        if(people>30) showToast("Split bills can include up to 30 people", "error");
 
         return;
 
     }
 
-    let subtotal=0;
-
-    cart.forEach(item=>{
-
-        subtotal+=item.price*item.quantity;
-
-    });
-
-    const discount=
-    Number(
-
-        document.getElementById(
-
-        "discount"
-
-        ).value || 0
-
-    );
-
-    const gst=
-
-    subtotal*gstPercentage/100;
-
-    const grand=
-
-    subtotal+gst-discount;
-
-    const perPerson=
-
-    grand/people;
-
-    showSplitBill(
-
-        people,
-
-        perPerson,
-
-        grand
-
-    );
+    showSplitBill(people);
 
 }
 
@@ -3202,123 +3440,106 @@ function splitBill(){
 // SHOW SPLIT BILL
 //==========================================================
 
-function showSplitBill(
+function showSplitBill(people){
+    const lineData = cart.map(item => ({quantity: Number(item.quantity), price: Number(item.price)}));
+    let rows = "";
+    cart.forEach((item, lineIndex) => {
+        const addonText = getItemAddonNames(item).map(escapeReceiptText).join(", ");
+        const label = `${escapeReceiptText(item.name)}${addonText ? `<small>Extras: ${addonText}</small>` : ""}${item.chef_note ? `<small>Note: ${escapeReceiptText(item.chef_note)}</small>` : ""}`;
+        rows += `<tr><td>${label}<small>Qty ${Number(item.quantity)} · ₹${Number(item.price).toFixed(2)} each</small></td>`;
+        for(let person = 0; person < people; person++){
+            rows += `<td><input class="split-qty" type="number" min="0" max="${Number(item.quantity)}" step="1" value="${person === 0 ? Number(item.quantity) : 0}" data-line="${lineIndex}" data-person="${person}" aria-label="Quantity for person ${person+1}"></td>`;
+        }
+        rows += `</tr>`;
+    });
 
-people,
-
-perPerson,
-
-total
-
-){
-
-    let html="";
-
-    html+=`
-
-    <h2>
-
-    Split Bill
-
-    </h2>
-
-    <hr>
-
-    `;
-
-    for(let i=1;i<=people;i++){
-
-        html+=`
-
-        <div
-        style="
-        padding:12px;
-        margin:10px 0;
-        border:1px solid #ddd;
-        border-radius:8px;">
-
-            <b>
-
-            Person ${i}
-
-            </b>
-
-            <br><br>
-
-            Amount :
-
-            ₹${perPerson.toFixed(2)}
-
-        </div>
-
-        `;
-
+    let personCards = "";
+    for(let person = 0; person < people; person++){
+        personCards += `<section class="split-person"><strong>Person ${person+1}: <span class="split-person-total" data-person="${person}">₹0.00</span></strong>
+            <label><input class="split-paid" type="checkbox" data-person="${person}"> Paid now</label>
+            <select class="split-method" data-person="${person}"><option>Cash</option><option>Card</option><option>UPI</option><option>Wallet</option><option>Paytm EDC</option><option>Other</option></select></section>`;
     }
 
-    html+=`
-
-    <hr>
-
-    <h3>
-
-    Total :
-
-    ₹${total.toFixed(2)}
-
-    </h3>
-
-    `;
-
-    const win=
-
-    window.open(
-
-    "",
-
-    "_blank",
-
-    "width=450,height=700"
-
-    );
-
-    win.document.write(`
-
-    <html>
-
-    <head>
-
-    <title>
-
-    Split Bill
-
-    </title>
-
-    <style>
-
-    body{
-
-    font-family:Arial;
-
-    padding:25px;
-
+    const win = window.open("", "_blank", "width=900,height=760");
+    if(!win){
+        showToast("Allow pop-ups to review and save the item split", "error");
+        return;
     }
-
-    </style>
-
-    </head>
-
-    <body>
-
-    ${html}
-
-    </body>
-
-    </html>
-
-    `);
-
+    win.document.write(`<!doctype html><html><head><title>Split Bill by Items</title><meta charset="utf-8"><style>
+        body{font:14px Arial,sans-serif;padding:20px;color:#26372d}h2{margin-top:0}p{color:#69786e}
+        .split-table{width:100%;border-collapse:collapse;margin:14px 0}.split-table th,.split-table td{padding:8px;border-bottom:1px solid #e3e9e4;text-align:center}
+        .split-table th:first-child,.split-table td:first-child{text-align:left}.split-table td:first-child{min-width:180px}
+        .split-table small{display:block;color:#7c887f;font-size:11px;margin-top:3px}.split-qty{width:54px;padding:6px}
+        .split-person{display:flex;align-items:center;gap:14px;padding:10px;border:1px solid #e3e9e4;border-radius:8px;margin:8px 0}
+        .split-person strong{flex:1}.split-person label{white-space:nowrap}button{padding:10px 14px;border:0;border-radius:6px;background:#33805a;color:#fff;font-weight:bold;cursor:pointer}
+    </style></head><body><h2>Split Bill by Items</h2>
+        <p>Assign every item quantity to a person. Tax and discount are divided in proportion to each person’s items.</p>
+        <table class="split-table"><thead><tr><th>Item</th>${Array.from({length: people}, (_, i) => `<th>Person ${i+1}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+        ${personCards}<h3>Order total: <span id="splitGrand">₹0.00</span></h3>
+        <p>Mark only shares collected now. Unpaid shares stay due on the order.</p>
+        <button id="saveSplit">Save order and record selected payments</button>
+    </body></html>`);
     win.document.close();
 
+    const discountBase = getDiscountAmount(lineData.reduce((sum, line) => sum + line.price * line.quantity, 0));
+    const discountRate = lineData.reduce((sum, line) => sum + line.price * line.quantity, 0)
+        ? discountBase / lineData.reduce((sum, line) => sum + line.price * line.quantity, 0) : 0;
+    const recalculate = () => {
+        const allocated = Array.from({length: people}, () => 0);
+        const allocatedSubtotals = Array.from({length: people}, () => 0);
+        const assignedByLine = Array.from({length: lineData.length}, () => 0);
+        let valid = true;
+        win.document.querySelectorAll(".split-qty").forEach(input => {
+            const line = Number(input.dataset.line), person = Number(input.dataset.person);
+            let quantity = Number(input.value || 0);
+            quantity = Math.max(0, Math.min(lineData[line].quantity, Math.floor(quantity)));
+            if(Number(input.value) !== quantity) input.value = quantity;
+            assignedByLine[line] += quantity;
+            allocatedSubtotals[person] += quantity * lineData[line].price;
+        });
+        if(assignedByLine.some((quantity, index) => quantity !== lineData[index].quantity)) valid = false;
+        if(allocatedSubtotals.some(value => value <= 0)) valid = false;
+        const amounts = allocatedSubtotals.map(subtotal => Math.round((subtotal + subtotal * gstPercentage / 100 - subtotal * discountRate) * 100) / 100);
+        const subtotal = lineData.reduce((sum, line) => sum + line.price * line.quantity, 0);
+        const exactTotal = Math.round((subtotal + subtotal * gstPercentage / 100 - discountBase) * 100) / 100;
+        const adjustment = Math.round((exactTotal - amounts.reduce((sum, amount) => sum + amount, 0)) * 100) / 100;
+        const firstUsed = allocatedSubtotals.findIndex(value => value > 0);
+        if(firstUsed >= 0) amounts[firstUsed] = Math.round((amounts[firstUsed] + adjustment) * 100) / 100;
+        amounts.forEach((amount, person) => {
+            allocated[person] = amount;
+            const totalLabel = win.document.querySelector(`.split-person-total[data-person="${person}"]`);
+            if(totalLabel) totalLabel.textContent = `₹${amount.toFixed(2)}`;
+            const paidCheckbox = win.document.querySelector(`.split-paid[data-person="${person}"]`);
+            if(paidCheckbox) paidCheckbox.disabled = allocatedSubtotals[person] <= 0;
+        });
+        const grandLabel = win.document.getElementById("splitGrand");
+        if(grandLabel) grandLabel.textContent = `₹${exactTotal.toFixed(2)}`;
+        return {valid, amounts, allocatedSubtotals};
+    };
+    win.document.querySelectorAll(".split-qty").forEach(input => input.addEventListener("input", recalculate));
+    recalculate();
+    win.document.getElementById("saveSplit").addEventListener("click", () => {
+        const result = recalculate();
+        if(!result.valid){ win.alert("Assign every item quantity exactly once and give each person at least one item."); return; }
+        const payments = Array.from(win.document.querySelectorAll(".split-paid:checked")).map(check => {
+            const person = Number(check.dataset.person);
+            return {person_number: person + 1, amount: result.amounts[person], payment_type: win.document.querySelector(`.split-method[data-person="${person}"]`).value};
+        });
+        const allocations = Array.from({length: people}, (_, person) => ({
+            person_number: person + 1,
+            amount: result.amounts[person],
+            items: Array.from({length: lineData.length}, (_, lineIndex) => {
+                const input = win.document.querySelector(`.split-qty[data-line="${lineIndex}"][data-person="${person}"]`);
+                return {line_index: lineIndex, quantity: Number(input?.value || 0)};
+            }).filter(entry => entry.quantity > 0)
+        }));
+        if(!win.opener || typeof win.opener.completeSplitOrder !== "function"){
+            win.alert("The POS page is no longer available. Reopen the split bill.");
+            return;
+        }
+        win.opener.completeSplitOrder({payments, details: {people: allocations}});
+        win.close();
+    });
 }
 
 //==========================================================
@@ -3344,6 +3565,8 @@ splitBill
 );
 
 }
+
+window.completeSplitOrder = splitOrder => checkout({splitOrder});
 
 //==========================================================
 // SHORTCUT

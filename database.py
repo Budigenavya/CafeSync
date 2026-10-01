@@ -95,6 +95,8 @@ def create_tables():
 
             stock INTEGER DEFAULT 0,
 
+            is_available INTEGER NOT NULL DEFAULT 1,
+
             barcode TEXT UNIQUE,
 
             image TEXT,
@@ -110,6 +112,23 @@ def create_tables():
         """)
 
         print("✓ Products Table Created")
+
+        product_columns = {
+            row[1]
+            for row in cursor.execute("PRAGMA table_info(products)").fetchall()
+        }
+        if "is_available" not in product_columns:
+            cursor.execute("ALTER TABLE products ADD COLUMN is_available INTEGER NOT NULL DEFAULT 1")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS product_addons(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                price REAL NOT NULL DEFAULT 0,
+                is_available INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
+            )
+        """)
         # ==========================================================
         # CUSTOMERS
         # ==========================================================
@@ -202,6 +221,32 @@ def create_tables():
 
         print("✓ Orders Table Created")
 
+        order_columns = {
+            row[1]
+            for row in cursor.execute("PRAGMA table_info(orders)").fetchall()
+        }
+        if "chef_notes" not in order_columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN chef_notes TEXT DEFAULT ''")
+        if "payment_status" not in order_columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'Pending'")
+            cursor.execute("""
+                UPDATE orders
+                SET payment_status='Paid'
+                WHERE payment_method IS NOT NULL
+                  AND TRIM(payment_method)!=''
+                  AND payment_method!='Pending'
+            """)
+        for column, definition in {
+            "cancelled_at": "TIMESTAMP",
+            "refund_reason": "TEXT DEFAULT ''",
+            "refunded_at": "TIMESTAMP",
+            "served_at": "TIMESTAMP",
+            "split_details": "TEXT",
+        }.items():
+            if column not in order_columns:
+                cursor.execute(f"ALTER TABLE orders ADD COLUMN {column} {definition}")
+                order_columns.add(column)
+
         # ==========================================================
         # ORDER ITEMS
         # ==========================================================
@@ -232,6 +277,14 @@ def create_tables():
         """)
 
         print("✓ Order Items Table Created")
+        item_columns = {
+            row[1]
+            for row in cursor.execute("PRAGMA table_info(order_items)").fetchall()
+        }
+        if "chef_note" not in item_columns:
+            cursor.execute("ALTER TABLE order_items ADD COLUMN chef_note TEXT DEFAULT ''")
+        if "addons" not in item_columns:
+            cursor.execute("ALTER TABLE order_items ADD COLUMN addons TEXT DEFAULT '[]'")
         # ==========================================================
         # EMPLOYEES
         # ==========================================================
@@ -290,7 +343,38 @@ def create_tables():
 
         """)
 
+        # Billing preferences are stored with the cafe settings so they are
+        # shared by every POS session instead of being browser-local.
+        settings_columns = {
+            row[1] for row in cursor.execute("PRAGMA table_info(settings)").fetchall()
+        }
+        for column, definition in {
+            "default_discount": "REAL NOT NULL DEFAULT 0",
+            "maximum_discount": "REAL NOT NULL DEFAULT 30",
+            "allow_manual_discount": "INTEGER NOT NULL DEFAULT 0",
+            "show_gst_on_receipt": "INTEGER NOT NULL DEFAULT 1",
+        }.items():
+            if column not in settings_columns:
+                cursor.execute(f"ALTER TABLE settings ADD COLUMN {column} {definition}")
+
         print("✓ Settings Table Created")
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS held_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer TEXT DEFAULT '',
+            customer_id INTEGER,
+            table_id INTEGER,
+                order_type TEXT DEFAULT 'Dine In',
+                payment_method TEXT DEFAULT 'Cash',
+                is_paid INTEGER NOT NULL DEFAULT 0,
+                items TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        held_order_columns = {row[1] for row in cursor.execute("PRAGMA table_info(held_orders)").fetchall()}
+        if "customer_id" not in held_order_columns:
+            cursor.execute("ALTER TABLE held_orders ADD COLUMN customer_id INTEGER")
 
         # ==========================================================
         # INVENTORY LOGS
@@ -347,6 +431,10 @@ def create_tables():
         )
 
         """)
+
+        payment_columns = {row[1] for row in cursor.execute("PRAGMA table_info(payments)").fetchall()}
+        if "split_person" not in payment_columns:
+            cursor.execute("ALTER TABLE payments ADD COLUMN split_person TEXT")
 
         print("✓ Payments Table Created")
 

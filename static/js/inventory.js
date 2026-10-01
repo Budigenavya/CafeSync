@@ -2,7 +2,7 @@
                     API
 ========================================================== */
 
-const API = "http://127.0.0.1:5000";
+const API = "";
 
 /* ==========================================================
                     GLOBAL VARIABLES
@@ -13,6 +13,7 @@ let products = [];
 let categories = [];
 
 let deleteProductId = null;
+let addonProductId = null;
 
 /* ==========================================================
                     DOM ELEMENTS
@@ -48,6 +49,83 @@ document.addEventListener(
     }
 
 );
+
+async function manageProductAddons(productId){
+    addonProductId = productId;
+    const product = products.find(item => Number(item.id) === Number(productId));
+    document.getElementById("addonsTitle").textContent = `${product?.name || "Product"} add-ons`;
+    document.getElementById("addonsModal").classList.add("active");
+    await loadProductAddons();
+}
+
+async function loadProductAddons(){
+    const list = document.getElementById("addonsList");
+    list.textContent = "Loading add-ons…";
+    try {
+        const response = await fetch(`${API}/inventory/products/${addonProductId}/addons`);
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not load add-ons");
+        list.replaceChildren();
+        if (!result.data.length) {
+            const empty = document.createElement("p");
+            empty.className = "addon-empty";
+            empty.textContent = "No add-ons yet. Add an optional extra below.";
+            list.appendChild(empty);
+            return;
+        }
+        result.data.forEach(addon => {
+            const row = document.createElement("div");
+            row.className = "addon-row";
+            const label = document.createElement("span");
+            label.textContent = addon.name;
+            const price = document.createElement("b");
+            price.textContent = `₹${Number(addon.price).toFixed(2)}`;
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "addon-remove";
+            remove.setAttribute("aria-label", `Delete ${addon.name}`);
+            remove.innerHTML = '<i class="fa-solid fa-trash"></i>';
+            remove.addEventListener("click", () => deleteProductAddon(addon.id));
+            row.append(label, price, remove);
+            list.appendChild(row);
+        });
+    } catch (error) {
+        list.textContent = error.message;
+    }
+}
+
+async function deleteProductAddon(addonId){
+    try {
+        const response = await fetch(`${API}/inventory/addons/${addonId}`, {method: "DELETE"});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not delete add-on");
+        showToast(result.message);
+        await loadProductAddons();
+    } catch (error) { showToast(error.message, "error"); }
+}
+
+document.getElementById("addonForm")?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const name = document.getElementById("addonName").value.trim();
+    const price = Number(document.getElementById("addonPrice").value);
+    try {
+        const response = await fetch(`${API}/inventory/products/${addonProductId}/addons`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name, price})
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not add add-on");
+        event.currentTarget.reset();
+        document.getElementById("addonPrice").value = 0;
+        showToast(result.message);
+        await loadProductAddons();
+    } catch (error) { showToast(error.message, "error"); }
+});
+
+document.getElementById("closeAddonsModal")?.addEventListener("click", () => {
+    document.getElementById("addonsModal").classList.remove("active");
+});
 
 async function initialize(){
 
@@ -435,6 +513,18 @@ function renderProducts(data){
                     onclick="editProduct(${product.id})">
 
                     <i class="fa-solid fa-pen"></i>
+
+                </button>
+
+                <button
+
+                    class="action-btn addon-btn"
+
+                    title="Manage priced add-ons"
+
+                    onclick="manageProductAddons(${product.id})">
+
+                    <i class="fa-solid fa-puzzle-piece"></i>
 
                 </button>
 

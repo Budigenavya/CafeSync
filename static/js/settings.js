@@ -864,6 +864,52 @@ showGSTOnReceipt
 
 });
 
+async function saveBillingPreferencesToServer(){
+    const payload = {
+        tax_percentage: Number(gstPercentage?.value || 5),
+        default_discount: Number(defaultDiscount?.value || 0),
+        maximum_discount: Number(maximumDiscount?.value || 30),
+        allow_manual_discount: Boolean(allowManualDiscount?.checked),
+        show_gst_on_receipt: Boolean(showGSTOnReceipt?.checked)
+    };
+    if(payload.default_discount > payload.maximum_discount){
+        showToast("Default discount cannot exceed the maximum discount", "#dc3545");
+        return;
+    }
+    try{
+        const response = await fetch("/settings/billing-preferences", {
+            method: "PUT", headers: {"Content-Type": "application/json"},
+            credentials: "same-origin", body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if(!response.ok || !result.success) throw new Error(result.message || "Save failed");
+        savePreferences();
+        showToast("Billing preferences saved");
+    }catch(error){
+        console.error("Billing preferences could not be saved", error);
+        showToast("Could not save billing preferences", "#dc3545");
+    }
+}
+
+[gstPercentage, defaultDiscount, maximumDiscount, allowManualDiscount, showGSTOnReceipt]
+    .forEach(control => control?.addEventListener("change", saveBillingPreferencesToServer));
+
+async function loadBillingPreferencesFromServer(){
+    try{
+        const response = await fetch("/settings/billing-preferences", {credentials: "same-origin"});
+        if(!response.ok) return;
+        const result = await response.json();
+        if(!result.success) return;
+        const pref = result.settings;
+        if(gstPercentage) gstPercentage.value = pref.tax_percentage ?? 5;
+        if(defaultDiscount) defaultDiscount.value = pref.default_discount ?? 0;
+        if(maximumDiscount) maximumDiscount.value = pref.maximum_discount ?? 30;
+        if(allowManualDiscount) allowManualDiscount.checked = Boolean(pref.allow_manual_discount);
+        if(showGSTOnReceipt) showGSTOnReceipt.checked = Boolean(pref.show_gst_on_receipt);
+        savePreferences();
+    }catch(error){ console.warn("Billing preferences unavailable", error); }
+}
+
 // ======================================================
 // LOAD LOCAL PREFERENCES
 // ======================================================
@@ -958,9 +1004,10 @@ document.addEventListener(
 
     "DOMContentLoaded",
 
-    ()=>{
+    async ()=>{
 
         loadPreferences();
+        await loadBillingPreferencesFromServer();
 
     }
 

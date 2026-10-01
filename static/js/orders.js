@@ -2,7 +2,19 @@
                     CafeSync Orders
 ========================================================== */
 
-const API = "http://127.0.0.1:5000";
+const API = "";
+
+function escapeOrderText(value){
+    return String(value ?? "").replace(/[&<>\"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+    })[char]);
+}
+
+function orderItemAddonNames(item){
+    let addons = item?.addons || [];
+    if (typeof addons === "string") { try { addons = JSON.parse(addons); } catch { addons = []; } }
+    return Array.isArray(addons) ? addons.map(addon => typeof addon === "string" ? addon : addon.name).filter(Boolean) : [];
+}
 
 let orders = [];
 
@@ -30,6 +42,9 @@ document.getElementById("statusFilter");
 
 const paymentFilter =
 document.getElementById("paymentFilter");
+
+const paymentStateFilter =
+document.getElementById("paymentStateFilter");
 
 const dateFilter =
 document.getElementById("filterDate");
@@ -223,13 +238,13 @@ function createOrderRow(order){
 
     row.classList.add(
 
-        order.status.toLowerCase()+"-row"
+        String(order.status || "Pending").toLowerCase()+"-row"
 
     );
 
     template.querySelector(".order-number")
 
-        .textContent = order.order_number;
+        .textContent = order.order_number || order.bill_no || `#${order.id}`;
 
     template.querySelector(".table-number")
 
@@ -269,19 +284,19 @@ function createOrderRow(order){
 
         .textContent =
 
-        order.payment_method;
+        `${order.payment_method || "—"} · ${order.payment_state || order.payment_status || "Pending"}`;
 
     const badge =
 
     template.querySelector(".status-badge");
 
-    badge.textContent = order.status;
+    badge.textContent = order.status || "Pending";
 
     badge.className =
 
         "status-badge " +
 
-        order.status.toLowerCase();
+        String(order.status || "Pending").toLowerCase();
 
     template.querySelector(".order-time")
 
@@ -304,6 +319,18 @@ function createOrderRow(order){
     template.querySelector(".refund-btn")
 
         .onclick = () => openRefundModal(order.id);
+
+    const paidButton = template.querySelector(".paid-btn");
+    const state = String(order.payment_state || order.payment_status || "Pending").toLowerCase();
+    const status = String(order.status || "Pending");
+    if (paidButton) {
+        paidButton.hidden = state === "paid" || state === "refunded" || status === "Cancelled" || status === "Refunded";
+        paidButton.onclick = () => markOrderPaid(order.id);
+    }
+    const refundButton = template.querySelector(".refund-btn");
+    if (refundButton) refundButton.hidden = !(["Served", "Completed"].includes(status) && state === "paid");
+    const cancelButton = template.querySelector(".cancel-btn");
+    if (cancelButton) cancelButton.hidden = ["Served", "Completed", "Cancelled", "Refunded"].includes(status);
 
     return row;
 
@@ -369,7 +396,7 @@ function viewOrder(orderId){
 
                 <span class="detail-value">
 
-                    ${selectedOrder.order_number}
+                    ${selectedOrder.order_number || selectedOrder.bill_no || `#${selectedOrder.id}`}
 
                 </span>
 
@@ -401,7 +428,7 @@ function viewOrder(orderId){
 
                 <span class="detail-value">
 
-                    ${selectedOrder.table_number}
+                    ${selectedOrder.table_number || selectedOrder.order_type || "—"}
 
                 </span>
 
@@ -417,7 +444,7 @@ function viewOrder(orderId){
 
                 <span class="detail-value">
 
-                    ${selectedOrder.payment_method}
+                    ${selectedOrder.payment_method || "—"} · ${selectedOrder.payment_state || selectedOrder.payment_status || "Pending"}
 
                 </span>
 
@@ -461,7 +488,7 @@ function viewOrder(orderId){
 
                 <span>
 
-                    ${item.quantity} × ${item.name}
+                    ${item.quantity} × ${escapeOrderText(item.name)}
 
                 </span>
 
@@ -475,11 +502,37 @@ function viewOrder(orderId){
 
         `;
 
+        if (item.chef_note) {
+            const note = document.createElement("small");
+            note.className = "item-note-detail";
+            note.textContent = `Note: ${item.chef_note}`;
+            container.lastElementChild.appendChild(note);
+        }
+        const extras = orderItemAddonNames(item);
+        if (extras.length) {
+            const addonLabel = document.createElement("small");
+            addonLabel.className = "item-note-detail";
+            addonLabel.textContent = `Extras: ${extras.join(", ")}`;
+            container.lastElementChild.appendChild(addonLabel);
+        }
+
     });
+
+    const splitSummary = selectedOrder.split_details?.people?.length
+        ? `<div class="detail-section"><h3>Split by person</h3>${selectedOrder.split_details.people.map(person => {
+            const assigned = (person.items || []).map(allocation => {
+                const item = selectedOrder.items[allocation.line_index];
+                return item ? `${allocation.quantity} × ${escapeOrderText(item.name)}` : "";
+            }).filter(Boolean).join(", ");
+            return `<p><strong>Person ${Number(person.person_number)} · ₹${Number(person.amount).toFixed(2)}</strong><br><small>${assigned}</small></p>`;
+        }).join("")}</div>`
+        : "";
 
     container.innerHTML += `
 
         </div>
+
+        ${splitSummary}
 
         <h2 class="text-right mt-20">
 
@@ -544,7 +597,7 @@ function printReceipt(orderId){
 
                 <b>Order :</b>
 
-                ${order.order_number}
+                ${order.order_number || order.bill_no || `#${order.id}`}
 
             </p>
 
@@ -560,7 +613,7 @@ function printReceipt(orderId){
 
                 <b>Table :</b>
 
-                ${order.table_number}
+                ${order.table_number || order.order_type || "—"}
 
             </p>
 
@@ -586,7 +639,7 @@ function printReceipt(orderId){
 
                         <tr>
 
-                            <td>${item.name}</td>
+                            <td>${escapeOrderText(item.name)}${orderItemAddonNames(item).length ? `<br><small>Extras: ${escapeOrderText(orderItemAddonNames(item).join(", "))}</small>` : ""}${item.chef_note ? `<br><small>Note: ${escapeOrderText(item.chef_note)}</small>` : ""}</td>
 
                             <td>${item.quantity}</td>
 
@@ -651,6 +704,21 @@ function openCancelModal(orderId){
 
     .classList.add("active");
 
+}
+
+async function markOrderPaid(orderId){
+    try {
+        const response = await fetch(`${API}/orders/${orderId}/payment`, {
+            method: "PUT",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({})
+        });
+        const result = await response.json();
+        showToast(result.message, result.success);
+        if (result.success) loadOrders();
+    } catch (error) {
+        showToast("Unable To Update Payment", false);
+    }
 }
 
 document
@@ -886,9 +954,11 @@ function applyFilters(){
 
     statusFilter.value;
 
-    const payment =
+        const payment =
 
     paymentFilter.value;
+
+    const paymentState = paymentStateFilter ? paymentStateFilter.value : "";
 
     const date =
 
@@ -900,7 +970,7 @@ function applyFilters(){
 
             !search ||
 
-            order.order_number.toLowerCase().includes(search) ||
+            String(order.order_number || order.bill_no || order.id).toLowerCase().includes(search) ||
 
             (order.customer_name || "")
 
@@ -908,7 +978,7 @@ function applyFilters(){
 
             .includes(search) ||
 
-            String(order.table_number || "")
+            String(order.table_number || order.order_type || "")
 
             .toLowerCase()
 
@@ -925,6 +995,9 @@ function applyFilters(){
             !payment ||
 
             order.payment_method === payment;
+
+        const matchesPaymentState = !paymentState ||
+            String(order.payment_state || order.payment_status || "Pending").toLowerCase() === paymentState.toLowerCase();
 
         let matchesDate = true;
 
@@ -951,6 +1024,8 @@ function applyFilters(){
             matchesStatus &&
 
             matchesPayment &&
+
+            matchesPaymentState &&
 
             matchesDate
 
@@ -1512,3 +1587,5 @@ console.log(
     "CafeSync Orders Module Loaded"
 
 );
+
+if (paymentStateFilter) paymentStateFilter.addEventListener("change", applyFilters);

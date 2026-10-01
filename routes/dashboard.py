@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify, request, render_template
 from models import fetch_one
 from database import get_connection
 from routes.auth import login_required
+from models import fetch_all
 
 dashboard_bp = Blueprint(
     "dashboard",
@@ -21,6 +22,23 @@ dashboard_bp = Blueprint(
 @login_required
 def dashboard():
     return render_template("dashboard.html")
+
+
+@dashboard_bp.route("/dashboard/overview", methods=["GET"])
+def dashboard_overview():
+    """Return cafe dashboard figures for the current local business day."""
+    sales = fetch_one("""
+        SELECT COUNT(*) AS orders,
+               IFNULL(SUM(CASE WHEN payment_status='Paid' THEN total ELSE 0 END), 0) AS sales,
+               IFNULL(AVG(CASE WHEN payment_status='Paid' THEN total END), 0) AS average_order
+        FROM orders
+        WHERE DATE(created_at)=DATE('now','localtime')
+    """)
+    return jsonify({
+        "today_orders": sales["orders"] or 0,
+        "today_sales": sales["sales"] or 0,
+        "average_order": sales["average_order"] or 0
+    })
 
 
 # ==========================================================
@@ -474,7 +492,7 @@ def recent_orders():
 
             payment_status,
 
-            order_status,
+            status,
 
             created_at
 
@@ -566,15 +584,13 @@ def dashboard_low_stock():
 
             stock,
 
-            min_stock,
-
             barcode,
 
             price
 
         FROM products
 
-        WHERE stock<=min_stock
+        WHERE stock<=5
 
         ORDER BY stock ASC
 

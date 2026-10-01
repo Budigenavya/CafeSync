@@ -2,6 +2,8 @@
 <html lang="en">
 
 <head>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#18372d">
 
     <meta charset="UTF-8">
 
@@ -67,7 +69,7 @@
         </li>
 
         <li>
-            <a href="/orders">
+            <a href="/orders/page">
                 <i class="fa-solid fa-receipt"></i>
                 Orders
             </a>
@@ -435,6 +437,22 @@
 
 
 
+<div class="modal" id="addonsModal">
+    <div class="modal-content small">
+        <div class="modal-header">
+            <h2 id="addonsTitle">Product add-ons</h2>
+            <button type="button" class="close" id="closeAddonsModal">&times;</button>
+        </div>
+        <p class="addon-help">Optional extras selected at the POS. Prices are added per item.</p>
+        <div id="addonsList" class="addons-list"></div>
+        <form id="addonForm" class="addon-form">
+            <label>Add-on name<input id="addonName" maxlength="80" required placeholder="e.g. Extra espresso shot"></label>
+            <label>Price (₹)<input id="addonPrice" type="number" min="0" max="100000" step="0.01" required value="0"></label>
+            <button type="submit" class="save-btn">Add add-on</button>
+        </form>
+    </div>
+</div>
+
 <!-- ==========================================================
                     CATEGORY MODAL
 =========================================================== -->
@@ -655,6 +673,7 @@
 
 </div>
 
+<script src="/static/js/pwa.js" defer></script>
 </body>
 
 </html>

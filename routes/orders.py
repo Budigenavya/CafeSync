@@ -11,6 +11,7 @@ from routes.auth import login_required
 import sqlite3
 import io
 import datetime
+import json
 
 from openpyxl import Workbook
 
@@ -26,6 +27,12 @@ orders_bp = Blueprint(
     __name__
 
 )
+
+
+@orders_bp.route("/orders/page", methods=["GET"])
+@login_required
+def orders_page():
+    return render_template("orders.html")
 
 
 
@@ -59,6 +66,40 @@ def error(message,status=400):
     }),status
 
 
+@orders_bp.route("/orders/<int:order_id>/payment", methods=["PUT"])
+@login_required
+def mark_order_paid(order_id):
+    data = request.get_json(silent=True) or {}
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT total, payment_status, payment_method, status FROM orders WHERE id=?", (order_id,))
+        order = cursor.fetchone()
+        if not order:
+            conn.close()
+            return error("Order Not Found", 404)
+        if order[3] in ("Cancelled", "Refunded"):
+            conn.close()
+            return error("Cancelled or refunded orders cannot be marked paid")
+        if str(order[1] or "").lower() != "paid":
+            method = (data.get("payment_method") or order[2] or "Cash").strip()
+            cursor.execute("""
+                SELECT COALESCE(SUM(amount), 0) FROM payments
+                WHERE order_id=? AND payment_status='Paid'
+            """, (order_id,))
+            amount_paid = float(cursor.fetchone()[0] or 0)
+            amount_due = max(0, float(order[0] or 0) - amount_paid)
+            cursor.execute("UPDATE orders SET payment_status='Paid', payment_method=? WHERE id=?", (method, order_id))
+            if amount_due > 0.009:
+                cursor.execute("INSERT INTO payments(order_id, payment_type, amount, payment_status) VALUES (?, ?, ?, 'Paid')", (order_id, method, amount_due))
+            conn.commit()
+        conn.close()
+        return success("Payment marked as paid")
+    except Exception as e:
+        print(e)
+        return error("Unable To Update Payment", 500)
+
+
 
 # ==========================================================
 # GET ALL ORDERS
@@ -84,13 +125,14 @@ def get_orders():
 
         cursor.execute("""
 
-            SELECT
-
-                *
-
-            FROM orders
-
-            ORDER BY id DESC
+            SELECT o.*, o.bill_no AS order_number,
+                   t.table_name AS table_number,
+                   c.name AS customer_name,
+                   o.payment_status AS payment_state
+            FROM orders o
+            LEFT JOIN tables t ON t.id = o.table_id
+            LEFT JOIN customers c ON c.id = o.customer_id
+            ORDER BY o.id DESC
 
         """)
 
@@ -104,11 +146,16 @@ def get_orders():
 
                 SELECT
 
+                    oi.id,
                     oi.product_id,
 
                     oi.quantity,
 
                     oi.price,
+
+                    oi.chef_note,
+
+                    oi.addons,
 
                     p.name
 
@@ -119,6 +166,7 @@ def get_orders():
                 ON oi.product_id = p.id
 
                 WHERE oi.order_id = ?
+                ORDER BY oi.id
 
             """,
 
@@ -139,6 +187,12 @@ def get_orders():
             order["items"] = items
 
             order["total_items"] = total_items
+
+            if order.get("split_details"):
+                try:
+                    order["split_details"] = json.loads(order["split_details"])
+                except (TypeError, ValueError):
+                    order["split_details"] = None
 
             orders.append(order)
 
@@ -226,6 +280,10 @@ def get_order(order_id):
                 oi.quantity,
 
                 oi.price,
+
+                oi.chef_note,
+
+                oi.addons,
 
                 p.name
 
@@ -341,6 +399,8 @@ def cancel_order(order_id):
         if order["status"] in [
 
             "Completed",
+
+            "Served",
 
             "Cancelled",
 
@@ -582,7 +642,7 @@ def refund_order(order_id):
         # VALIDATE STATUS
         # --------------------------------------
 
-        if order["status"] != "Completed":
+        if order["status"] not in ("Completed", "Served"):
 
             conn.close()
 
@@ -592,47 +652,9 @@ def refund_order(order_id):
 
             )
 
-        # --------------------------------------
-        # RESTORE STOCK
-        # --------------------------------------
-
-        cursor.execute("""
-
-            SELECT
-
-                product_id,
-
-                quantity
-
-            FROM order_items
-
-            WHERE order_id=?
-
-        """,
-
-        (order_id,))
-
-        items = cursor.fetchall()
-
-        for item in items:
-
-            cursor.execute("""
-
-                UPDATE products
-
-                SET stock = stock + ?
-
-                WHERE id=?
-
-            """,
-
-            (
-
-                item["quantity"],
-
-                item["product_id"]
-
-            ))
+        if str(order.get("payment_status") or "").lower() != "paid":
+            conn.close()
+            return error("Only paid orders can be refunded")
 
         # --------------------------------------
         # UPDATE ORDER
@@ -645,6 +667,8 @@ def refund_order(order_id):
             SET
 
                 status=?,
+
+                payment_status='Refunded',
 
                 refund_reason=?,
 
@@ -664,6 +688,15 @@ def refund_order(order_id):
 
             order_id
 
+        ))
+
+        cursor.execute("""
+            INSERT INTO payments(order_id, payment_type, amount, payment_status)
+            VALUES (?, ?, ?, 'Refunded')
+        """, (
+            order_id,
+            order.get("payment_method") or "Other",
+            -float(order.get("total") or 0)
         ))
 
         conn.commit()
@@ -1131,21 +1164,22 @@ def orders_dashboard():
 
                 COUNT(*) AS total_orders,
 
-                IFNULL(SUM(total),0) AS revenue,
+                IFNULL(SUM(CASE WHEN payment_status='Paid' THEN total ELSE 0 END),0) AS revenue,
 
-                SUM(CASE WHEN status='Pending' THEN 1 ELSE 0 END) AS pending,
+                IFNULL(SUM(CASE WHEN status='Pending' THEN 1 ELSE 0 END),0) AS pending,
 
-                SUM(CASE WHEN status='Preparing' THEN 1 ELSE 0 END) AS preparing,
+                IFNULL(SUM(CASE WHEN status='Preparing' THEN 1 ELSE 0 END),0) AS preparing,
 
-                SUM(CASE WHEN status='Ready' THEN 1 ELSE 0 END) AS ready,
+                IFNULL(SUM(CASE WHEN status='Ready' THEN 1 ELSE 0 END),0) AS ready,
 
-                SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) AS completed,
+                IFNULL(SUM(CASE WHEN status IN ('Completed','Served') THEN 1 ELSE 0 END),0) AS completed,
 
-                SUM(CASE WHEN status='Cancelled' THEN 1 ELSE 0 END) AS cancelled,
+                IFNULL(SUM(CASE WHEN status='Cancelled' THEN 1 ELSE 0 END),0) AS cancelled,
 
-                SUM(CASE WHEN status='Refunded' THEN 1 ELSE 0 END) AS refunded
+                IFNULL(SUM(CASE WHEN status='Refunded' THEN 1 ELSE 0 END),0) AS refunded
 
             FROM orders
+            WHERE DATE(created_at)=DATE('now','localtime')
 
         """)
 
@@ -1206,19 +1240,16 @@ def search_orders():
 
         cursor.execute("""
 
-            SELECT *
-
-            FROM orders
-
-            WHERE
-
-                order_number LIKE ?
-
-                OR customer_name LIKE ?
-
-                OR table_number LIKE ?
-
-            ORDER BY id DESC
+            SELECT o.*, o.bill_no AS order_number,
+                   t.table_name AS table_number,
+                   c.name AS customer_name,
+                   o.payment_status AS payment_state
+            FROM orders o
+            LEFT JOIN tables t ON t.id = o.table_id
+            LEFT JOIN customers c ON c.id = o.customer_id
+            WHERE o.bill_no LIKE ? OR c.name LIKE ?
+               OR CAST(t.table_name AS TEXT) LIKE ?
+            ORDER BY o.id DESC
 
         """,
 
@@ -1311,10 +1342,13 @@ def filter_orders():
 
         query = """
 
-            SELECT *
-
-            FROM orders
-
+            SELECT o.*, o.bill_no AS order_number,
+                   t.table_name AS table_number,
+                   c.name AS customer_name,
+                   o.payment_status AS payment_state
+            FROM orders o
+            LEFT JOIN tables t ON t.id = o.table_id
+            LEFT JOIN customers c ON c.id = o.customer_id
             WHERE 1=1
 
         """
@@ -1323,23 +1357,23 @@ def filter_orders():
 
         if status:
 
-            query += " AND status=?"
+            query += " AND o.status=?"
 
             params.append(status)
 
         if payment:
 
-            query += " AND payment_method=?"
+            query += " AND o.payment_method=?"
 
             params.append(payment)
 
         if date:
 
-            query += " AND DATE(created_at)=?"
+            query += " AND DATE(o.created_at)=?"
 
             params.append(date)
 
-        query += " ORDER BY id DESC"
+        query += " ORDER BY o.id DESC"
 
         cursor.execute(
 

@@ -36,6 +36,24 @@ from routes.delivery import delivery_bp
 app = Flask(__name__)
 
 
+@app.route("/manifest.webmanifest")
+def pwa_manifest():
+    return send_from_directory(app.static_folder, "manifest.webmanifest", mimetype="application/manifest+json")
+
+
+@app.route("/service-worker.js")
+def pwa_service_worker():
+    response = send_from_directory(app.static_folder, "js/service-worker.js", mimetype="application/javascript")
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@app.route("/offline")
+def pwa_offline_page():
+    return render_template("offline.html")
+
+
 # ==========================
 # CONFIGURATION
 # ==========================
@@ -79,7 +97,10 @@ def check_auth():
     public_routes = [
         "/",
         "/login",
-        "/verify-session"
+        "/verify-session",
+        "/manifest.webmanifest",
+        "/service-worker.js",
+        "/offline"
     ]
 
 
@@ -181,6 +202,8 @@ app.register_blueprint(
 # ==========================
 @app.route("/")
 def home():
+    if "user_id" in session:
+        return redirect("/dashboard")
     return redirect("/login")
 
 

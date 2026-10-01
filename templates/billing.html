@@ -2,6 +2,8 @@
 <html lang="en">
 
 <head>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#18372d">
 
     <meta charset="UTF-8">
 
@@ -31,6 +33,8 @@
 
     <link rel="stylesheet"
           href="{{ url_for('static', filename='css/billing.css') }}">
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/billing-pos.css') }}">
 
 </head>
 
@@ -125,7 +129,7 @@
             </a>
 
         </li>
-        <li><a href="/orders">Orders</a></li>
+        <li><a href="/orders/page">Orders</a></li>
         <li><a href="/delivery">Delivery</a></li>
 
         <li>
@@ -200,38 +204,31 @@
 
         </button>
 
-        <h2>CafeSync Billing</h2>
+        <h2>CafeSync POS</h2>
+
+        <button id="newOrderBtn" class="new-order-btn"><i class="fas fa-plus"></i> New Order</button>
 
     </div>
 
     <div class="center">
 
-        <div class="search-box">
-
-            <i class="fas fa-search"></i>
-
-            <input
-                type="text"
-                id="searchProduct"
-                placeholder="Search products...">
-
-        </div>
+        <div class="quick-lookup"><i class="fas fa-receipt"></i><input id="billLookup" placeholder="Bill No" autocomplete="off"><button type="button" data-lookup="billLookup">Search</button></div>
+        <div class="quick-lookup"><i class="fas fa-kitchen-set"></i><input id="kotLookup" placeholder="KOT No" autocomplete="off"><button type="button" data-lookup="kotLookup">Search</button></div>
 
     </div>
 
     <div class="right">
 
-        <button>
-
-            <i class="fas fa-bell"></i>
-
-        </button>
-
-        <button id="themeBtn">
-
-            <i class="fas fa-moon"></i>
-
-        </button>
+        <a class="pos-tool" href="/dashboard" title="Store overview"><i class="fas fa-store"></i><span>Store</span></a>
+        <a class="pos-tool" href="/kitchen" title="Live kitchen view"><i class="fas fa-tower-broadcast"></i><span>Live view</span></a>
+        <a class="pos-tool" href="/orders/page" title="Orders"><i class="fas fa-receipt"></i><span>Orders</span></a>
+        <button id="itemsAvailabilityBtn" class="pos-tool" title="Turn menu items on or off"><i class="fas fa-toggle-on"></i><span>Items On/Off</span></button>
+        <button id="printBtn" class="pos-tool" title="Print receipt"><i class="fas fa-print"></i><span>Receipt</span></button>
+        <button id="holdOrder" class="pos-tool" title="Hold this order"><i class="fas fa-pause"></i><span>Hold</span></button>
+        <a class="pos-tool" href="/inventory" title="Stock alerts"><i class="fas fa-bell"></i><span>Alerts</span></a>
+        <a class="pos-tool" href="/settings" title="Support and settings"><i class="fas fa-headset"></i><span>Support</span></a>
+        <button id="logoutPos" class="pos-tool" title="Sign out"><i class="fas fa-right-from-bracket"></i><span>Logout</span></button>
+        <button id="themeBtn" class="visually-hidden" type="button" aria-label="Toggle theme"></button>
 
         <div id="clock">
 
@@ -279,6 +276,12 @@
 
         <div class="product-section">
 
+            <div class="product-search search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchProduct" placeholder="Search item by name or scan barcode...">
+                <span class="search-shortcut">/</span>
+            </div>
+
             <h3>
 
                 Products
@@ -315,24 +318,24 @@
 
         </h2>
 
+        <div class="order-type-switch" role="group" aria-label="Order type">
+            <button type="button" class="order-type-btn active" data-order-type="Dine In"><i class="fas fa-chair"></i> Dine in</button>
+            <button type="button" class="order-type-btn" data-order-type="Parcel"><i class="fas fa-bag-shopping"></i> Parcel</button>
+            <button type="button" class="order-type-btn" data-order-type="Delivery"><i class="fas fa-motorcycle"></i> Delivery</button>
+        </div>
+
         <div class="customer-details">
 
             <select id="tableNo">
 
-                <option value="1">Table 1</option>
-
-                <option value="2">Table 2</option>
-
-                <option value="3">Table 3</option>
-
-                <option value="">Take Away</option>
+                <option value="">Choose a table</option>
 
             </select>
 
-            <input
-                type="text"
-                id="customerName"
-                placeholder="Customer Name">
+            <div class="customer-field"><i class="fas fa-user"></i>
+                <input type="text" id="customerName" placeholder="Customer name or phone" autocomplete="off">
+                <div id="customerSuggestions" class="customer-suggestions" hidden></div>
+            </div>
 
         </div>
 
@@ -367,25 +370,27 @@
 
     <div class="summary-row">
 
-        <span>Discount</span>
+        <span>Discount (%)</span>
 
         <input
             type="number"
             id="discount"
             value="0"
             min="0"
+            max="30"
+            step="0.01"
             placeholder="0">
+
+        <span id="discountAmount">₹0.00</span>
 
     </div>
 
     <hr>
 
-    <div class="summary-row total">
-
-        <strong>Grand Total</strong>
-
+    <div class="summary-row split-total-row">
+        <button type="button" id="splitBill" class="split-bill-btn"><i class="fas fa-users"></i> Split</button>
+        <span>Total</span>
         <strong id="grandTotal">₹0.00</strong>
-
     </div>
 
 </div>
@@ -419,24 +424,25 @@
         </button>
 
         <button class="payment-btn"
-                data-payment="UPI">
-
-            <i class="fas fa-qrcode"></i>
-
-            UPI
-
-        </button>
-
-        <button class="payment-btn"
-                data-payment="Split">
+                data-payment="Other">
 
             <i class="fas fa-wallet"></i>
 
-            Split
+            Other
 
         </button>
 
+        <button id="morePaymentToggle" class="payment-btn more-payment-toggle" type="button"><i class="fas fa-ellipsis"></i> More</button>
+
     </div>
+
+    <div id="morePaymentOptions" class="more-payment-options" hidden>
+        <button class="payment-btn" data-payment="UPI"><i class="fas fa-qrcode"></i> UPI</button>
+        <button class="payment-btn" data-payment="Wallet"><i class="fas fa-mobile-screen"></i> Wallet</button>
+        <button class="payment-btn" data-payment="Paytm EDC"><i class="fas fa-credit-card"></i> Paytm EDC</button>
+    </div>
+
+    <label class="paid-check"><input id="isPaid" type="checkbox"> It’s paid</label>
 
 </div>
 
@@ -445,36 +451,6 @@
 <!-- ========================================================= -->
 
 <div class="action-buttons">
-
-    <button
-        id="holdOrder"
-        class="btn warning">
-
-        <i class="fas fa-pause-circle"></i>
-
-        Hold
-
-    </button>
-
-    <button
-        id="kotBtn"
-        class="btn secondary">
-
-        <i class="fas fa-receipt"></i>
-
-        KOT
-
-    </button>
-
-    <button
-        id="printBtn"
-        class="btn info">
-
-        <i class="fas fa-print"></i>
-
-        Print
-
-    </button>
 
     <button
         id="clearCart"
@@ -486,23 +462,42 @@
 
     </button>
 
-    <button
-        id="checkoutBtn"
-        class="btn success">
+    <button id="savePrintBtn" class="btn save-print"><i class="fas fa-print"></i> Save &amp; Print</button>
+    <button id="saveBillBtn" class="btn success"><i class="fas fa-check"></i> Save &amp; Bill</button>
+    <button id="kotBtn" class="btn secondary"><i class="fas fa-receipt"></i> KOT &amp; Print</button>
+    <button id="checkoutBtn" class="visually-hidden" type="button">Checkout</button>
+    <button id="holdOrderBottom" class="btn warning"><i class="fas fa-pause"></i> Hold</button>
 
-        <i class="fas fa-check-circle"></i>
+</div>
 
-        Checkout
-	<button id="splitBill" class="action-btn">
+<div id="addonPickerModal" class="lookup-modal" aria-hidden="true">
+  <div class="lookup-card addon-picker-card" role="dialog" aria-modal="true" aria-labelledby="addonPickerTitle">
+    <button type="button" class="lookup-close" id="closeAddonPicker" aria-label="Close"><i class="fas fa-xmark"></i></button>
+    <div class="lookup-mark"><i class="fas fa-puzzle-piece"></i></div>
+    <h2 id="addonPickerTitle">Choose add-ons</h2>
+    <p class="addon-base-price" id="addonPickerBasePrice"></p>
+    <div id="addonChoices" class="addon-choices"></div>
+    <div class="addon-picker-footer"><strong id="addonPickerTotal"></strong><button type="button" id="confirmAddons" class="btn success">Add to order</button></div>
+  </div>
+</div>
 
-    		<i class="fas fa-users"></i>
+<div id="lookupModal" class="lookup-modal" aria-hidden="true">
+  <div class="lookup-card" role="dialog" aria-modal="true" aria-labelledby="lookupTitle">
+    <button type="button" class="lookup-close" id="closeLookup" aria-label="Close"><i class="fas fa-xmark"></i></button>
+    <div class="lookup-mark"><i class="fas fa-receipt"></i></div>
+    <h2 id="lookupTitle">Order found</h2>
+    <div id="lookupDetails"></div>
+  </div>
+</div>
 
-    		Split Bill
-
-	</button>
-
-    </button>
-
+<div id="itemsModal" class="lookup-modal" aria-hidden="true">
+  <div class="lookup-card items-availability-card" role="dialog" aria-modal="true" aria-labelledby="itemsModalTitle">
+    <button type="button" class="lookup-close" id="closeItemsModal" aria-label="Close"><i class="fas fa-xmark"></i></button>
+    <div class="lookup-mark"><i class="fas fa-toggle-on"></i></div>
+    <h2 id="itemsModalTitle">Menu availability</h2>
+    <p class="modal-help">Turn items off when they’re unavailable. Hidden items won’t appear in the order menu.</p>
+    <div id="availabilityList" class="availability-list"></div>
+  </div>
 </div>
 
 <!-- ========================================================= -->
@@ -562,6 +557,7 @@
 <script src="{{ url_for('static', filename='js/billing.js') }}"></script>
 
 
+<script src="/static/js/pwa.js" defer></script>
 </body>
 
 </html>

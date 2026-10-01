@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "CafeSync Cafe POS",
+  "short_name": "CafeSync",
+  "description": "CafeSync point of sale and cafe operations",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f8f5",
+  "theme_color": "#18372d",
+  "categories": ["business", "food", "productivity"],
+  "icons": [
+    {
+      "src": "/static/images/cafesync-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/images/cafesync-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/images/cafesync-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

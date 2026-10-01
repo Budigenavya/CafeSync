@@ -2,6 +2,8 @@
 <html lang="en">
 
 <head>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#18372d">
 
 <meta charset="UTF-8">
 
@@ -60,7 +62,7 @@ Delivery
 </a>
 </li>
 <li>
-<a href="/orders">
+<a href="/orders/page">
 <i class="fas fa-chart-line"></i>
 Orders
 </a>
@@ -1469,6 +1471,7 @@ Extra ketchup.
 <script src="{{ url_for('static', filename='js/delivery.js') }}"></script>
 <script src="{{ url_for('static', filename='js/menu.js') }}"></script>
 
+<script src="/static/js/pwa.js" defer></script>
 </body>
 
 </html>

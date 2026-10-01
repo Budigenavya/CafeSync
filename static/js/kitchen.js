@@ -3,11 +3,18 @@
                     kitchen.js - Part 1
 ========================================================== */
 
-const API = "http://127.0.0.1:5000";
+const API = "";
 
 let kitchenOrders = [];
 
 let previousOrderCount = 0;
+let kitchenLoaded = false;
+
+function kitchenAddonNames(item){
+    let addons = item?.addons || [];
+    if (typeof addons === "string") { try { addons = JSON.parse(addons); } catch { addons = []; } }
+    return Array.isArray(addons) ? addons.map(addon => typeof addon === "string" ? addon : addon.name).filter(Boolean) : [];
+}
 
 
 /* ==========================================================
@@ -56,13 +63,9 @@ async function loadKitchenOrders(){
 
     try{
 
-        showLoading();
+        if(!kitchenLoaded) showLoading();
 
-        const response = await fetch(
-
-            API + "/kitchen/orders"
-
-        );
+        const response = await fetch(API + "/kitchen/orders", {credentials:"same-origin"});
 
         const result = await response.json();
 
@@ -70,7 +73,9 @@ async function loadKitchenOrders(){
 
         if(result.success){
 
-            kitchenOrders = result.data;
+            kitchenOrders = result.data || [];
+            kitchenLoaded = true;
+            document.getElementById("servedCount").textContent = result.served_today || 0;
 
             updateSummary();
 
@@ -124,13 +129,13 @@ function renderOrders(){
 
             keyword !== "" &&
 
-            !String(order.table_name)
+            !String(order.table_name || order.order_type || "")
             .toLowerCase()
             .includes(keyword)
 
             &&
 
-            !String(order.order_number)
+            !String(order.order_number || order.bill_no || order.id)
             .toLowerCase()
             .includes(keyword)
 
@@ -184,14 +189,15 @@ function createOrderCard(order){
     const card = template.querySelector(".order-card");
 
     card.dataset.id = order.id;
+    card.dataset.status = String(order.status || "Pending").toLowerCase();
 
     template.querySelector(".table-name")
 
-        .textContent = order.table_name;
+        .textContent = order.table_name || (order.table_id ? `Table ${order.table_id}` : order.order_type || "Takeaway");
 
     template.querySelector(".order-number")
 
-        .textContent = order.order_number;
+        .textContent = order.order_number || order.bill_no || `#${order.id}`;
 
     template.querySelector(".customer-name")
 
@@ -200,6 +206,11 @@ function createOrderCard(order){
         order.customer_name ||
 
         "Walk-in Customer";
+
+    const notes = template.querySelector(".order-notes");
+    const notesText = template.querySelector(".order-notes span");
+    notesText.textContent = order.chef_notes || "";
+    notes.hidden = !order.chef_notes;
 
     template.querySelector(".bill-total")
 
@@ -226,22 +237,26 @@ function createOrderCard(order){
 
     itemsBox.innerHTML = "";
 
-    order.items.forEach(item => {
-
-        itemsBox.innerHTML += `
-
-            <div class="item-row">
-
-                <span>
-
-                    ${item.quantity} × ${item.name}
-
-                </span>
-
-            </div>
-
-        `;
-
+    (order.items || []).forEach(item => {
+        const row = document.createElement("div");
+        row.className = "item-row";
+        const text = document.createElement("span");
+        text.textContent = `${item.quantity} × ${item.name}`;
+        row.appendChild(text);
+        const addonNames = kitchenAddonNames(item);
+        if (addonNames.length) {
+            const extras = document.createElement("small");
+            extras.className = "item-note-display";
+            extras.textContent = `Extras: ${addonNames.join(", ")}`;
+            row.appendChild(extras);
+        }
+        if (item.chef_note) {
+            const note = document.createElement("small");
+            note.className = "item-note-display";
+            note.textContent = `Note: ${item.chef_note}`;
+            row.appendChild(note);
+        }
+        itemsBox.appendChild(row);
     });
 
     template.querySelector(".btn-start")
@@ -301,6 +316,10 @@ function updateSummary(){
         o=>o.status==="Ready"
 
     ).length;
+
+    document.getElementById("pendingLaneCount").textContent = document.getElementById("pendingCount").textContent;
+    document.getElementById("preparingLaneCount").textContent = document.getElementById("preparingCount").textContent;
+    document.getElementById("readyLaneCount").textContent = document.getElementById("readyCount").textContent;
 
 }
 
@@ -475,11 +494,7 @@ async function serveOrder(orderId){
                     AUTO REFRESH
 ========================================================== */
 
-setInterval(function(){
-
-    loadKitchenOrders();
-
-},5000);
+setInterval(function(){ loadKitchenOrders(); },15000);
 
 
 /* ==========================================================

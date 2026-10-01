@@ -2,16 +2,24 @@
 <html lang="en">
 
 <head>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#18372d">
 
 <meta charset="UTF-8">
 
 <meta name="viewport"
 content="width=device-width, initial-scale=1.0">
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+
 <title>CafeSync | Kitchen Display</title>
 
 <link rel="stylesheet"
           href="{{ url_for('static', filename='css/kitchen.css') }}">
+<link rel="stylesheet"
+          href="{{ url_for('static', filename='css/kitchen-pos.css') }}">
 
 <link rel="stylesheet"
 href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -19,7 +27,6 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 </head>
 
 <body>
-{% include 'menu.html' %}
 
 <!-- ==========================================
                 HEADER
@@ -31,11 +38,13 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
         <i class="fa-solid fa-utensils"></i>
 
-        <h2>CafeSync Kitchen</h2>
+        <div><h2>CafeSync Kitchen</h2><small>LIVE PREPARATION BOARD</small></div>
 
     </div>
 
     <div class="header-right">
+
+        <a class="dashboard-link" href="/dashboard"><i class="fa-solid fa-arrow-left"></i> Dashboard</a>
 
         <div class="clock">
 
@@ -127,7 +136,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
             <i class="fa-solid fa-hourglass-half"></i>
 
-            Pending
+            Pending <span class="lane-count" id="pendingLaneCount">0</span>
 
         </div>
 
@@ -149,7 +158,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
             <i class="fa-solid fa-fire-burner"></i>
 
-            Preparing
+            Preparing <span class="lane-count" id="preparingLaneCount">0</span>
 
         </div>
 
@@ -171,7 +180,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
             <i class="fa-solid fa-circle-check"></i>
 
-            Ready
+            Ready <span class="lane-count" id="readyLaneCount">0</span>
 
         </div>
 
@@ -611,8 +620,8 @@ preload="auto">
 
 
 <script src="{{ url_for('static', filename='js/kitchen.js') }}"></script>
-<script src="{{ url_for('static', filename='js/menu.js') }}"></script>
 
+<script src="/static/js/pwa.js" defer></script>
 </body>
 
 </html>
