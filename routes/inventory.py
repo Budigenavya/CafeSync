@@ -1232,7 +1232,67 @@ def inventory_exception(error_obj):
 
     }),500
 
+# ==========================================================
+# TEMPORARY MENU IMPORT
+# ==========================================================
 
+@inventory_bp.route("/import-menu", methods=["POST"])
+@login_required
+def import_menu():
+
+    import os
+
+    menu_file = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "menu_export.sql"
+    )
+
+    if not os.path.exists(menu_file):
+        return jsonify({
+            "success": False,
+            "message": "menu_export.sql not found"
+        }), 404
+
+    conn = None
+
+    try:
+        conn = get_connection()
+
+        # Temporarily disable foreign-key checks
+        conn.execute("PRAGMA foreign_keys = OFF")
+
+        # Remove only menu data
+        conn.execute("DELETE FROM products")
+        conn.execute("DELETE FROM categories")
+
+        # Import local menu
+        with open(menu_file, "r", encoding="utf-8") as f:
+            sql = f.read()
+
+        conn.executescript(sql)
+
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Categories and products imported successfully"
+        })
+
+    except Exception as e:
+
+        if conn:
+            conn.rollback()
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+
+        if conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.close()
 
 # ==========================================================
 # END OF FILE
