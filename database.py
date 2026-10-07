@@ -176,6 +176,18 @@ def create_tables():
         """)
 
         print("✓ Tables Table Created")
+        table_columns = {row[1] for row in cursor.execute("PRAGMA table_info(tables)").fetchall()}
+        if "capacity" not in table_columns:
+            cursor.execute("ALTER TABLE tables ADD COLUMN capacity INTEGER NOT NULL DEFAULT 4")
+        for column, definition in {
+            "reservation_name": "TEXT NOT NULL DEFAULT ''",
+            "reservation_phone": "TEXT NOT NULL DEFAULT ''",
+            "reservation_guests": "INTEGER",
+            "reserved_for": "TEXT",
+            "reservation_notes": "TEXT NOT NULL DEFAULT ''",
+        }.items():
+            if column not in table_columns:
+                cursor.execute(f"ALTER TABLE tables ADD COLUMN {column} {definition}")
 
         # ==========================================================
         # ORDERS

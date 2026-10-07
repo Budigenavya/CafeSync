@@ -104,50 +104,44 @@ def get_categories():
     methods=["GET"]
 )
 def get_products():
-
+    conn = None
     try:
-
         conn = get_connection()
         conn.row_factory = sqlite3.Row
-
         cursor = conn.cursor()
+        product_columns = {row[1] for row in cursor.execute("PRAGMA table_info(products)").fetchall()}
+        category_columns = {row[1] for row in cursor.execute("PRAGMA table_info(categories)").fetchall()}
+        if not {"id", "name", "price"}.issubset(product_columns):
+            raise sqlite3.OperationalError("The products table is missing its required id, name, or price columns.")
 
-        cursor.execute("""
-            SELECT
-                p.id,
-                p.name,
-                p.price,
-                p.stock,
-                p.is_available,
-                p.barcode,
-                p.category_id,
-                c.name AS category_name
-            FROM products p
-            LEFT JOIN categories c
-            ON p.category_id = c.id
-            ORDER BY p.name
-        """)
-
-        products = [
-            dict(row)
-            for row in cursor.fetchall()
-        ]
-
-        conn.close()
-
-        return success(
-            "Products Loaded",
-            products
+        stock_expr = "p.stock" if "stock" in product_columns else "0"
+        availability_expr = "p.is_available" if "is_available" in product_columns else "1"
+        barcode_expr = "p.barcode" if "barcode" in product_columns else "NULL"
+        category_id_expr = "p.category_id" if "category_id" in product_columns else "NULL"
+        category_join = (
+            "LEFT JOIN categories c ON p.category_id=c.id"
+            if "category_id" in product_columns and {"id", "name"}.issubset(category_columns)
+            else ""
         )
-
+        category_name_expr = "c.name" if category_join else "NULL"
+        cursor.execute(f"""
+            SELECT p.id, p.name, p.price,
+                   {stock_expr} AS stock,
+                   {availability_expr} AS is_available,
+                   {barcode_expr} AS barcode,
+                   {category_id_expr} AS category_id,
+                   {category_name_expr} AS category_name
+            FROM products p
+            {category_join}
+            ORDER BY p.name COLLATE NOCASE
+        """)
+        return success("Products Loaded", [dict(row) for row in cursor.fetchall()])
     except Exception as e:
-
-        print(e)
-
-        return jsonify({
-            "success":False,
-            "message":"Unable To Load Products"
-        }),500
+        print("Unable To Load Products:", repr(e))
+        return jsonify({"success": False, "message": "Unable To Load Products"}), 500
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 @inventory_bp.route(

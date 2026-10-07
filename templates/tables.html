@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#18372d">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tables-pos.css') }}">
+  <title>CafeSync · Table Service</title>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/dashboard"><span class="brand-icon"><i class="fa-solid fa-mug-hot"></i></span><span>CafeSync<small>TABLE SERVICE</small></span></a>
+    <nav><a href="/dashboard"><i class="fa-solid fa-chart-line"></i> Dashboard</a><a href="/billing"><i class="fa-solid fa-cash-register"></i> POS</a><a href="/orders/page"><i class="fa-solid fa-receipt"></i> Orders</a></nav>
+    <button id="refreshTables" class="icon-button" title="Refresh tables"><i class="fa-solid fa-rotate"></i></button>
+  </header>
+  <main>
+    <section class="page-heading"><div><p class="eyebrow">LIVE FLOOR</p><h1>Tables</h1><p class="subtitle">Track seats and service status across your cafe.</p></div><button id="addTable" class="primary"><i class="fa-solid fa-plus"></i> Add table</button></section>
+    <section id="tableSummary" class="summary-grid" aria-label="Table status summary"></section>
+    <section class="board-heading"><h2>Floor overview</h2><label class="search-box"><i class="fa-solid fa-magnifying-glass"></i><input id="tableSearch" type="search" placeholder="Search tables"></label></section>
+    <section id="tableBoard" class="table-grid" aria-live="polite"><div class="loading">Loading tables…</div></section>
+  </main>
+  <div id="tableDialog" class="dialog-backdrop" hidden>
+    <form id="tableForm" class="dialog-card">
+      <button type="button" id="closeTableDialog" class="dialog-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      <p class="eyebrow">FLOOR SETUP</p><h2 id="tableDialogTitle">Add a table</h2>
+      <label>Table name<input id="tableName" required maxlength="40" placeholder="e.g. Table 8"></label>
+      <label>Seat capacity<input id="tableCapacity" type="number" min="1" max="50" value="4" required></label>
+      <button class="primary" type="submit">Save table</button>
+    </form>
+  </div>
+  <div id="reservationDialog" class="dialog-backdrop" hidden>
+    <form id="reservationForm" class="dialog-card">
+      <button type="button" id="closeReservationDialog" class="dialog-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      <p class="eyebrow">GUEST BOOKING</p><h2 id="reservationTitle">Reserve a table</h2>
+      <label>Guest name<input id="reservationName" required maxlength="80" autocomplete="name"></label>
+      <label>Phone number<input id="reservationPhone" type="tel" maxlength="30" autocomplete="tel"></label>
+      <label>Party size<input id="reservationGuests" type="number" min="1" max="50" value="2" required></label>
+      <label>Reservation date and time<input id="reservedFor" type="datetime-local" required></label>
+      <label>Notes<input id="reservationNotes" maxlength="200" placeholder="Optional requests"></label>
+      <button class="primary" type="submit">Save reservation</button>
+    </form>
+  </div>
+  <div id="tableToast" class="toast" role="status" aria-live="polite"></div>
+  <script src="{{ url_for('static', filename='js/tables-page.js') }}"></script>
+  <script src="/static/js/pwa.js" defer></script>
+</body>
+</html>

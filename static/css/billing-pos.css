@@ -1,5 +1,5 @@
 /* CafeSync POS refresh: a calmer, faster counter workflow. */
-.right-panel{overflow:visible!important}
+.right-panel{overflow:visible!important}.empty-products{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:10px;margin:20px auto;padding:20px;color:#64746a;text-align:center;font-size:12px}.empty-products strong{color:#a14343}.empty-products span{max-width:360px;overflow-wrap:anywhere}.empty-products button{border:0;border-radius:6px;padding:8px 14px;background:#167b5c;color:#fff;font-weight:700;cursor:pointer}
 :root{--pos-green:#167b5c;--pos-green-dark:#125d47;--pos-soft:#eaf5ef;--pos-ink:#28342e;--pos-line:#e7ede9}
 body{background:#f5f8f5;color:var(--pos-ink)}
 .sidebar{background:#18372d!important;box-shadow:3px 0 18px #18372d12!important}

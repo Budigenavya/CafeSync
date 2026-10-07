@@ -1,4 +1,4 @@
-const CACHE_NAME = "cafesync-shell-v1";
+const CACHE_NAME = "cafesync-shell-v2";
 const OFFLINE_URL = "/offline";
 
 self.addEventListener("install", event => {
@@ -33,12 +33,13 @@ self.addEventListener("fetch", event => {
     if(url.pathname.startsWith("/static/")){
         event.respondWith((async () => {
             const cache = await caches.open(CACHE_NAME);
-            const cached = await cache.match(request);
-            const network = fetch(request).then(response => {
-                if(response.ok) cache.put(request, response.clone());
+            try{
+                const response = await fetch(request);
+                if(response.ok) await cache.put(request, response.clone());
                 return response;
-            }).catch(() => null);
-            return cached || await network || new Response("Offline", {status: 503});
+            }catch{
+                return await cache.match(request) || new Response("Offline", {status: 503});
+            }
         })());
         return;
     }

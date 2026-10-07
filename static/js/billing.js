@@ -91,6 +91,19 @@ async function initializePOS(){
 
     initializeOrderType();
 
+    const requestedTable = new URLSearchParams(window.location.search).get("table_id");
+    if(requestedTable){
+        const selector = document.getElementById("tableNo");
+        const option = Array.from(selector?.options || []).find(item => item.value === requestedTable);
+        if(option && !option.disabled){
+            selector.value = requestedTable;
+            selectedOrderType = "Dine In";
+            document.querySelectorAll(".order-type-btn").forEach(button => button.classList.toggle("active", button.dataset.orderType === "Dine In"));
+            selector.parentElement?.classList.remove("table-hidden");
+            localStorage.setItem("cafesync_table", requestedTable);
+        }
+    }
+
     updateTotals();
 
 }
@@ -151,7 +164,7 @@ async function loadTables(){
             const option = document.createElement("option");
             option.value = table.id;
             option.textContent = `${table.table_name}${table.status && table.status !== "Available" ? ` · ${table.status}` : ""}`;
-            option.disabled = table.status && table.status !== "Available";
+            option.disabled = table.status && !["Available", "Occupied"].includes(table.status);
             selector.appendChild(option);
 
         });
@@ -317,15 +330,19 @@ async function loadProducts(){
 
         showLoader();
 
-        const response = await fetch(
-            `${API}/inventory/products`
-        );
+        const response = await fetch(`${API}/inventory/products`, {
+            credentials: "same-origin",
+            headers: {"Accept": "application/json"}
+        });
 
         if(!response.ok){
 
-            throw new Error(
-                "Failed to load products"
-            );
+            if(response.status === 401){
+                window.location.assign("/login");
+                return;
+            }
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.message || `Product request failed (${response.status})`);
 
         }
 
@@ -336,10 +353,11 @@ async function loadProducts(){
             result
         );
 
-        // IMPORTANT:
-        // Backend sends products inside result.data
-
-        products = result.data || [];
+        if(result.success === false) throw new Error(result.message || "The server could not load menu products.");
+        const productRows = Array.isArray(result.data) ? result.data :
+            (Array.isArray(result.products) ? result.products : null);
+        if(!productRows) throw new Error("The products response had an unexpected format.");
+        products = productRows;
 
         hideLoader();
 
@@ -357,11 +375,10 @@ async function loadProducts(){
         );
 
         products = [];
-
-        showToast(
-            "Unable to load products",
-            "error"
-        );
+        if(productGrid){
+            productGrid.innerHTML = `<div class="empty-products"><strong>Products could not load</strong><span>${escapeReceiptText(error.message || "Check the connection and reload.")}</span><button type="button" onclick="loadProducts()">Try again</button></div>`;
+        }
+        showToast(error.message || "Unable to load products", "error");
 
     }
 

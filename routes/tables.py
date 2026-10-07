@@ -6,13 +6,45 @@
 ==========================================================
 """
 
-from flask import Blueprint, jsonify, request
-from models import fetch_all, fetch_one, execute_query
+from flask import Blueprint, jsonify, request, render_template
+from database import get_connection
+from datetime import datetime
+
+
+def fetch_all(query, params=()):
+    conn = get_connection()
+    try:
+        return conn.execute(query, params).fetchall()
+    finally:
+        conn.close()
+
+
+def fetch_one(query, params=()):
+    conn = get_connection()
+    try:
+        return conn.execute(query, params).fetchone()
+    finally:
+        conn.close()
+
+
+def execute_query(query, params=()):
+    conn = get_connection()
+    try:
+        cursor = conn.execute(query, params)
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
 
 tables_bp = Blueprint(
     "tables",
     __name__
 )
+
+
+@tables_bp.route("/tables/page", methods=["GET"])
+def tables_page():
+    return render_template("tables.html")
 
 
 # ==========================================================
@@ -315,13 +347,20 @@ def change_table_status(table_id):
 
         UPDATE tables
 
-        SET status=?
+        SET status=?,
+            reservation_name=CASE WHEN ?='Reserved' THEN reservation_name ELSE '' END,
+            reservation_phone=CASE WHEN ?='Reserved' THEN reservation_phone ELSE '' END,
+            reservation_guests=CASE WHEN ?='Reserved' THEN reservation_guests ELSE NULL END,
+            reserved_for=CASE WHEN ?='Reserved' THEN reserved_for ELSE NULL END,
+            reservation_notes=CASE WHEN ?='Reserved' THEN reservation_notes ELSE '' END
 
         WHERE id=?
 
     """, (
 
         status,
+
+        status, status, status, status, status,
 
         table_id
 
@@ -563,19 +602,40 @@ def cleaning_complete(table_id):
     "/tables/<int:table_id>/reserve",
     methods=["PUT"]
 )
-def reserve_table():
+def reserve_table(table_id):
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()
+    phone = str(data.get("phone", "")).strip()
+    notes = str(data.get("notes", "")).strip()
+    reserved_for = str(data.get("reserved_for", "")).strip()
+    try:
+        guests = int(data.get("guests", 0))
+    except (TypeError, ValueError):
+        guests = 0
 
-    table_id = request.view_args["table_id"]
+    table = fetch_one("SELECT status, capacity FROM tables WHERE id=?", (table_id,))
+    if not table:
+        return jsonify({"success": False, "message": "Table not found"}), 404
+    if table["status"] not in ("Available", "Reserved"):
+        return jsonify({"success": False, "message": "Only available tables can be reserved"}), 400
+    if not name:
+        return jsonify({"success": False, "message": "Guest name is required"}), 400
+    if guests < 1 or guests > int(table["capacity"] or 4):
+        return jsonify({"success": False, "message": f"Party size must be between 1 and {int(table['capacity'] or 4)}"}), 400
+    if reserved_for:
+        try:
+            datetime.fromisoformat(reserved_for)
+        except ValueError:
+            return jsonify({"success": False, "message": "Choose a valid reservation date and time"}), 400
+    else:
+        return jsonify({"success": False, "message": "Reservation date and time are required"}), 400
 
     execute_query("""
-
         UPDATE tables
-
-        SET status='Reserved'
-
+        SET status='Reserved', reservation_name=?, reservation_phone=?,
+            reservation_guests=?, reserved_for=?, reservation_notes=?
         WHERE id=?
-
-    """,(table_id,))
+    """, (name, phone, guests, reserved_for, notes, table_id))
 
     return jsonify({
 
@@ -600,7 +660,8 @@ def cancel_reservation(table_id):
 
         UPDATE tables
 
-        SET status='Available'
+        SET status='Available', reservation_name='', reservation_phone='',
+            reservation_guests=NULL, reserved_for=NULL, reservation_notes=''
 
         WHERE id=?
 

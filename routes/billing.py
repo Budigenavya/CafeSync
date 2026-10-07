@@ -731,6 +731,9 @@ def create_order():
                 return jsonify({"success": False, "message": split_error}), 400
             cursor.execute("UPDATE orders SET split_details=? WHERE id=?", (json.dumps(normalized_split), order_id))
 
+        if table_id:
+            cursor.execute("UPDATE tables SET status='Occupied' WHERE id=?", (table_id,))
+
         conn.commit()
 
         conn.close()
@@ -2061,6 +2064,9 @@ def create_kot():
         if totals_error:
             conn.rollback()
             return jsonify({"success": False, "message": totals_error}), 409
+
+        if table_id:
+            cursor.execute("UPDATE tables SET status='Occupied' WHERE id=?", (table_id,))
 
         conn.commit()
 
