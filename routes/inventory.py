@@ -4,13 +4,19 @@
 
 from flask import Blueprint
 from flask import request
-from flask import jsonify, render_template
+from flask import jsonify, render_template, current_app, send_from_directory, url_for, session
 
 from routes.auth import login_required
 
 from database import get_connection
 
 import sqlite3
+import os
+import uuid
+import json
+import math
+from werkzeug.utils import secure_filename
+from config import PRODUCT_IMAGE_FOLDER
 
 
 # ==========================================================
@@ -24,6 +30,45 @@ inventory_bp = Blueprint(
     __name__
 
 )
+
+ALLOWED_PRODUCT_IMAGE_TYPES = {
+    "image/jpeg": ("jpg", b"\xff\xd8\xff"),
+    "image/png": ("png", b"\x89PNG\r\n\x1a\n"),
+    "image/webp": ("webp", b"RIFF"),
+}
+
+
+def _save_product_image(upload):
+    if not upload or not upload.filename:
+        return None
+    if upload.mimetype not in ALLOWED_PRODUCT_IMAGE_TYPES:
+        raise ValueError("Choose a JPG, PNG, or WebP photo.")
+    payload = upload.read(5 * 1024 * 1024 + 1)
+    upload.stream.seek(0)
+    if not payload or len(payload) > 5 * 1024 * 1024:
+        raise ValueError("Product photos must be smaller than 5 MB.")
+    extension, signature = ALLOWED_PRODUCT_IMAGE_TYPES[upload.mimetype]
+    if not payload.startswith(signature) or (extension == "webp" and payload[8:12] != b"WEBP"):
+        raise ValueError("The selected file is not a valid JPG, PNG, or WebP image.")
+    os.makedirs(PRODUCT_IMAGE_FOLDER, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.{extension}"
+    upload.save(os.path.join(PRODUCT_IMAGE_FOLDER, secure_filename(filename)))
+    return filename
+
+
+def _remove_product_image(filename):
+    if not filename:
+        return
+    safe_name = os.path.basename(filename)
+    try:
+        os.remove(os.path.join(PRODUCT_IMAGE_FOLDER, safe_name))
+    except (FileNotFoundError, OSError):
+        pass
+
+
+@inventory_bp.route("/inventory/product-images/<path:filename>")
+def product_image(filename):
+    return send_from_directory(PRODUCT_IMAGE_FOLDER, filename)
 
 @inventory_bp.route("/inventory")
 @login_required
@@ -118,6 +163,7 @@ def get_products():
         availability_expr = "p.is_available" if "is_available" in product_columns else "1"
         barcode_expr = "p.barcode" if "barcode" in product_columns else "NULL"
         category_id_expr = "p.category_id" if "category_id" in product_columns else "NULL"
+        image_expr = "p.image" if "image" in product_columns else "NULL"
         category_join = (
             "LEFT JOIN categories c ON p.category_id=c.id"
             if "category_id" in product_columns and {"id", "name"}.issubset(category_columns)
@@ -130,12 +176,16 @@ def get_products():
                    {availability_expr} AS is_available,
                    {barcode_expr} AS barcode,
                    {category_id_expr} AS category_id,
-                   {category_name_expr} AS category_name
+                   {category_name_expr} AS category_name,
+                   {image_expr} AS image
             FROM products p
             {category_join}
             ORDER BY p.name COLLATE NOCASE
         """)
-        return success("Products Loaded", [dict(row) for row in cursor.fetchall()])
+        products = [dict(row) for row in cursor.fetchall()]
+        for product in products:
+            product["image_url"] = url_for("inventory.product_image", filename=product["image"]) if product.get("image") else None
+        return success("Products Loaded", products)
     except Exception as e:
         print("Unable To Load Products:", repr(e))
         return jsonify({"success": False, "message": "Unable To Load Products"}), 500
@@ -269,6 +319,9 @@ def inventory_dashboard():
 
         total_products=cursor.fetchone()["total"]
 
+        cursor.execute("SELECT COUNT(*) AS total FROM products WHERE price IS NULL OR TRIM(CAST(price AS TEXT))=''")
+        unpriced_products = cursor.fetchone()["total"]
+
         # -----------------------------
         # Categories
         # -----------------------------
@@ -331,6 +384,8 @@ def inventory_dashboard():
 
                 "total_products":total_products,
 
+                "unpriced_products":unpriced_products,
+
                 "total_categories":total_categories,
 
                 "inventory_value":inventory_value,
@@ -372,7 +427,7 @@ def add_category():
 
     try:
 
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
 
         name = data.get("name", "").strip()
 
@@ -461,15 +516,26 @@ def add_product():
 
     try:
 
-        data = request.get_json()
+        data = request.form if request.files else (request.get_json(silent=True) or {})
 
         name = data.get("name", "").strip()
         category_id = data.get("category_id")
         barcode = data.get("barcode", "").strip()
         price = data.get("price", 0)
         stock = data.get("stock", 0)
+        try:
+            price = float(price)
+            stock = int(stock)
+            if not math.isfinite(price) or price < 0 or stock < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return error("Enter a valid non-negative price and whole-number stock.")
+        category_id = category_id or None
+        image_filename = _save_product_image(request.files.get("image"))
 
         if not name:
+
+            _remove_product_image(image_filename)
 
             return error(
 
@@ -498,6 +564,7 @@ def add_product():
             if cursor.fetchone():
 
                 conn.close()
+                _remove_product_image(image_filename)
 
                 return error(
 
@@ -517,11 +584,12 @@ def add_product():
 
                 stock,
 
-                barcode
+                barcode,
+                image
 
             )
 
-            VALUES(?,?,?,?,?)
+            VALUES(?,?,?,?,?,?)
 
         """,
 
@@ -535,7 +603,8 @@ def add_product():
 
             stock,
 
-            barcode
+            barcode,
+            image_filename
 
         ))
 
@@ -549,7 +618,14 @@ def add_product():
 
         )
 
+    except ValueError as e:
+        if 'image_filename' in locals():
+            _remove_product_image(image_filename)
+        return error(str(e), 400)
     except Exception as e:
+
+        if 'image_filename' in locals():
+            _remove_product_image(image_filename)
 
         print(e)
 
@@ -577,17 +653,34 @@ def update_product(product_id):
 
     try:
 
-        data = request.get_json()
+        data = request.form if request.files else (request.get_json(silent=True) or {})
 
         name = data.get("name", "").strip()
         category_id = data.get("category_id")
         barcode = data.get("barcode", "").strip()
         price = data.get("price", 0)
         stock = data.get("stock", 0)
+        try:
+            price = float(price)
+            stock = int(stock)
+            if not math.isfinite(price) or price < 0 or stock < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return error("Enter a valid non-negative price and whole-number stock.")
+        category_id = category_id or None
+        image_filename = _save_product_image(request.files.get("image"))
 
         conn = get_connection()
 
         cursor = conn.cursor()
+
+        cursor.execute("SELECT image FROM products WHERE id=?", (product_id,))
+        existing_product = cursor.fetchone()
+        if not existing_product:
+            conn.close()
+            _remove_product_image(image_filename)
+            return error("Product Not Found", 404)
+        old_image = existing_product[0]
 
         if barcode:
 
@@ -614,6 +707,7 @@ def update_product(product_id):
             if cursor.fetchone():
 
                 conn.close()
+                _remove_product_image(image_filename)
 
                 return error(
 
@@ -635,7 +729,8 @@ def update_product(product_id):
 
                 stock=?,
 
-                barcode=?
+                barcode=?,
+                image=COALESCE(?, image)
 
             WHERE id=?
 
@@ -653,6 +748,8 @@ def update_product(product_id):
 
             barcode,
 
+            image_filename,
+
             product_id
 
         ))
@@ -661,13 +758,23 @@ def update_product(product_id):
 
         conn.close()
 
+        if image_filename:
+            _remove_product_image(old_image)
+
         return success(
 
             "Product Updated Successfully"
 
         )
 
+    except ValueError as e:
+        if 'image_filename' in locals():
+            _remove_product_image(image_filename)
+        return error(str(e), 400)
     except Exception as e:
+
+        if 'image_filename' in locals():
+            _remove_product_image(image_filename)
 
         print(e)
 
@@ -698,6 +805,13 @@ def delete_product(product_id):
         conn = get_connection()
 
         cursor = conn.cursor()
+
+        cursor.execute("SELECT image FROM products WHERE id=?", (product_id,))
+        product_row = cursor.fetchone()
+        if not product_row:
+            conn.close()
+            return error("Product Not Found", 404)
+        image_filename = product_row[0]
 
         cursor.execute("DELETE FROM product_addons WHERE product_id=?", (product_id,))
 
@@ -733,6 +847,8 @@ def delete_product(product_id):
 
         conn.close()
 
+        _remove_product_image(image_filename)
+
         return success(
 
             "Product Deleted Successfully"
@@ -750,6 +866,201 @@ def delete_product(product_id):
             500
 
         )
+
+
+@inventory_bp.route("/inventory/ingredients", methods=["GET", "POST"])
+def ingredients_api():
+    if request.method == "GET":
+        conn = get_connection()
+        try:
+            rows = conn.execute("SELECT * FROM ingredients ORDER BY name COLLATE NOCASE").fetchall()
+            return success("Ingredients loaded", [dict(row) for row in rows])
+        finally:
+            conn.close()
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name") or "").strip()[:100]
+    unit = str(data.get("unit") or "g").strip()[:20]
+    try:
+        stock = float(data.get("current_stock", 0))
+        threshold = float(data.get("low_stock_threshold", 0))
+        cost = float(data.get("unit_cost", 0))
+        if not name or not unit or any(not math.isfinite(value) or value < 0 for value in (stock, threshold, cost)):
+            raise ValueError
+    except (TypeError, ValueError):
+        return error("Enter a name, unit, and valid non-negative stock, threshold, and unit cost.")
+    conn = get_connection()
+    try:
+        cursor = conn.execute("INSERT INTO ingredients(name,unit,current_stock,low_stock_threshold,unit_cost) VALUES(?,?,?,?,?)",
+                              (name, unit, stock, threshold, cost))
+        if stock:
+            conn.execute("INSERT INTO ingredient_movements(ingredient_id,quantity_change,movement_type,actor) VALUES(?,?,'Opening',?)",
+                         (cursor.lastrowid, stock, session.get("username", "")))
+        conn.commit()
+        return success("Ingredient added", {"id": cursor.lastrowid})
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return error("An ingredient with that name already exists.", 409)
+    finally:
+        conn.close()
+
+
+@inventory_bp.route("/inventory/ingredients/<int:ingredient_id>/movement", methods=["POST"])
+def ingredient_movement(ingredient_id):
+    data = request.get_json(silent=True) or {}
+    movement_type = str(data.get("type") or "").strip().title()
+    if movement_type not in {"Purchase", "Waste", "Adjustment"}:
+        return error("Choose Purchase, Waste, or Adjustment.")
+    try:
+        change = float(data.get("quantity_change"))
+        if not math.isfinite(change) or change == 0 or (movement_type == "Purchase" and change < 0) or (movement_type == "Waste" and change > 0):
+            raise ValueError
+    except (TypeError, ValueError):
+        return error("Enter a non-zero quantity change with the correct sign (purchase +, waste -).")
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT current_stock FROM ingredients WHERE id=?", (ingredient_id,)).fetchone()
+        if not row:
+            return error("Ingredient not found.", 404)
+        new_stock = float(row[0]) + change
+        if new_stock < -1e-9:
+            return error("This movement would make ingredient stock negative.", 409)
+        conn.execute("UPDATE ingredients SET current_stock=? WHERE id=?", (max(0, new_stock), ingredient_id))
+        conn.execute("INSERT INTO ingredient_movements(ingredient_id,quantity_change,movement_type,notes,actor) VALUES(?,?,?,?,?)",
+                     (ingredient_id, change, movement_type, str(data.get("notes") or "").strip()[:250], session.get("username", "")))
+        conn.commit()
+        return success("Stock movement saved", {"current_stock": max(0, new_stock)})
+    finally:
+        conn.close()
+
+
+@inventory_bp.route("/inventory/products/<int:product_id>/recipe", methods=["GET", "PUT"])
+def product_recipe(product_id):
+    conn = get_connection()
+    try:
+        if not conn.execute("SELECT 1 FROM products WHERE id=?", (product_id,)).fetchone():
+            return error("Menu item not found.", 404)
+        if request.method == "GET":
+            rows = conn.execute("""SELECT r.ingredient_id, r.quantity, i.name, i.unit, i.current_stock, i.unit_cost
+                                   FROM recipes r JOIN ingredients i ON i.id=r.ingredient_id
+                                   WHERE r.product_id=? ORDER BY i.name""", (product_id,)).fetchall()
+            recipe = [dict(row) for row in rows]
+            cost = sum(float(row["quantity"]) * float(row["unit_cost"]) for row in recipe)
+            return success("Recipe loaded", {"items": recipe, "estimated_cost": round(cost, 2)})
+        data = request.get_json(silent=True) or {}
+        items = data.get("items")
+        if not isinstance(items, list) or len(items) > 100:
+            return error("Recipe items must be a list of up to 100 ingredients.")
+        normalized = []
+        seen = set()
+        for item in items:
+            try:
+                ingredient_id = int(item["ingredient_id"])
+                quantity = float(item["quantity"])
+            except (KeyError, TypeError, ValueError):
+                return error("Each recipe row needs an ingredient and quantity.")
+            if ingredient_id in seen or quantity <= 0 or not math.isfinite(quantity) or not conn.execute("SELECT 1 FROM ingredients WHERE id=? AND active=1", (ingredient_id,)).fetchone():
+                return error("Recipe contains an invalid or repeated ingredient.")
+            seen.add(ingredient_id)
+            normalized.append((product_id, ingredient_id, quantity))
+        conn.execute("DELETE FROM recipes WHERE product_id=?", (product_id,))
+        conn.executemany("INSERT INTO recipes(product_id,ingredient_id,quantity) VALUES(?,?,?)", normalized)
+        conn.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
+                     (session.get("username", ""), "recipe_updated", "product", str(product_id), json.dumps(normalized)))
+        conn.commit()
+        return success("Recipe saved", {"ingredient_count": len(normalized)})
+    except sqlite3.Error:
+        conn.rollback()
+        current_app.logger.exception("Could not save recipe for product %s", product_id)
+        return error("Could not save the recipe.", 500)
+    finally:
+        conn.close()
+
+
+@inventory_bp.route("/inventory/receipts", methods=["GET", "POST"])
+def stock_receipts():
+    conn = get_connection()
+    try:
+        if request.method == "GET":
+            rows = conn.execute("""SELECT r.*, s.name AS supplier_name FROM stock_receipts r
+                                   LEFT JOIN suppliers s ON s.id=r.supplier_id
+                                   ORDER BY r.id DESC LIMIT 100""").fetchall()
+            return success("Purchase receipts loaded", [dict(row) for row in rows])
+        data = request.get_json(silent=True) or {}
+        items = data.get("items")
+        supplier_id = data.get("supplier_id")
+        if not isinstance(items, list) or not items:
+            return error("Add at least one ingredient to the purchase receipt.")
+        normalized = []
+        total = 0.0
+        for item in items:
+            try:
+                ingredient_id = int(item["ingredient_id"])
+                quantity = float(item["quantity"])
+                unit_cost = float(item.get("unit_cost", 0))
+            except (KeyError, TypeError, ValueError):
+                return error("Receipt line is invalid.")
+            if quantity <= 0 or unit_cost < 0 or not math.isfinite(quantity + unit_cost) or not conn.execute("SELECT 1 FROM ingredients WHERE id=? AND active=1", (ingredient_id,)).fetchone():
+                return error("Receipt contains an invalid ingredient, quantity, or cost.")
+            normalized.append((ingredient_id, quantity, unit_cost))
+            total += quantity * unit_cost
+        if supplier_id not in (None, "") and not conn.execute("SELECT 1 FROM suppliers WHERE id=? AND active=1", (supplier_id,)).fetchone():
+            return error("Supplier not found.", 404)
+        cursor = conn.execute("INSERT INTO stock_receipts(supplier_id,reference,total_cost,received_by,notes) VALUES(?,?,?,?,?)",
+                              (supplier_id or None, str(data.get("reference") or "").strip()[:80], total, session.get("username", ""), str(data.get("notes") or "").strip()[:250]))
+        receipt_id = cursor.lastrowid
+        for ingredient_id, quantity, unit_cost in normalized:
+            conn.execute("INSERT INTO stock_receipt_items(receipt_id,ingredient_id,quantity,unit_cost) VALUES(?,?,?,?)", (receipt_id, ingredient_id, quantity, unit_cost))
+            conn.execute("UPDATE ingredients SET current_stock=current_stock+?, unit_cost=? WHERE id=?", (quantity, unit_cost, ingredient_id))
+            conn.execute("INSERT INTO ingredient_movements(ingredient_id,quantity_change,movement_type,reference,actor) VALUES(?,?,'Purchase',?,?)",
+                         (ingredient_id, quantity, f"Receipt {receipt_id}", session.get("username", "")))
+        conn.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
+                     (session.get("username", ""), "stock_received", "receipt", str(receipt_id), json.dumps({"total_cost": total, "lines": len(normalized)})))
+        conn.commit()
+        return success("Purchase received and stock updated", {"receipt_id": receipt_id, "total_cost": total})
+    except sqlite3.Error:
+        conn.rollback()
+        current_app.logger.exception("Could not record stock receipt")
+        return error("Could not record the purchase receipt.", 500)
+    finally:
+        conn.close()
+
+
+@inventory_bp.route("/inventory/suppliers", methods=["GET", "POST"])
+def suppliers_api():
+    conn = get_connection()
+    try:
+        if request.method == "GET":
+            rows = conn.execute("SELECT id,name,phone,email FROM suppliers WHERE active=1 ORDER BY name").fetchall()
+            return success("Suppliers loaded", [dict(row) for row in rows])
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name") or "").strip()[:120]
+        if not name:
+            return error("Supplier name is required.")
+        conn.execute("INSERT OR IGNORE INTO suppliers(name,phone,email) VALUES(?,?,?)",
+                     (name, str(data.get("phone") or "").strip()[:40], str(data.get("email") or "").strip()[:120]))
+        row = conn.execute("SELECT id,name FROM suppliers WHERE name=? COLLATE NOCASE", (name,)).fetchone()
+        conn.commit()
+        return success("Supplier saved", dict(row))
+    except sqlite3.Error:
+        conn.rollback()
+        return error("Could not save supplier.", 500)
+    finally:
+        conn.close()
+
+
+@inventory_bp.route("/inventory/movements", methods=["GET"])
+def ingredient_movements_api():
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT m.id, i.name AS ingredient_name, i.unit, m.quantity_change,
+                   m.movement_type, m.reference, m.notes, m.actor, m.created_at
+            FROM ingredient_movements m JOIN ingredients i ON i.id=m.ingredient_id
+            ORDER BY m.id DESC LIMIT 100
+        """).fetchall()
+        return success("Ingredient movement history loaded", [dict(row) for row in rows])
+    finally:
+        conn.close()
 # ==========================================================
 # IMPORTS (Add at the top if not already present)
 # ==========================================================
@@ -1220,15 +1531,13 @@ def inventory_health():
 
 def inventory_exception(error_obj):
 
-    print(error_obj)
+    current_app.logger.exception("Inventory request failed", exc_info=error_obj)
 
     return jsonify({
 
         "success":False,
 
-        "message":"Internal Server Error",
-
-        "error":str(error_obj)
+        "message":"Inventory request failed. Please retry or contact a manager."
 
     }),500
 
@@ -1239,60 +1548,12 @@ def inventory_exception(error_obj):
 @inventory_bp.route("/import-menu", methods=["POST"])
 @login_required
 def import_menu():
-
-    import os
-
-    menu_file = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "menu_export.sql"
-    )
-
-    if not os.path.exists(menu_file):
-        return jsonify({
-            "success": False,
-            "message": "menu_export.sql not found"
-        }), 404
-
-    conn = None
-
-    try:
-        conn = get_connection()
-
-        # Temporarily disable foreign-key checks
-        conn.execute("PRAGMA foreign_keys = OFF")
-
-        # Remove only menu data
-        conn.execute("DELETE FROM products")
-        conn.execute("DELETE FROM categories")
-
-        # Import local menu
-        with open(menu_file, "r", encoding="utf-8") as f:
-            sql = f.read()
-
-        conn.executescript(sql)
-
-        conn.commit()
-
-        return jsonify({
-            "success": True,
-            "message": "Categories and products imported successfully"
-        })
-
-    except Exception as e:
-
-        if conn:
-            conn.rollback()
-
-        return jsonify({
-            "success": False,
-            "message": str(e)
-        }), 500
-
-    finally:
-
-        if conn:
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.close()
+    # The old endpoint executed a bundled SQL dump after deleting the live
+    # catalog. Keep the route retired so a stale client cannot erase products.
+    return jsonify({
+        "success": False,
+        "message": "Legacy menu import is disabled because it could overwrite your current catalog. Manage products from Inventory."
+    }), 410
 
 # ==========================================================
 # END OF FILE
