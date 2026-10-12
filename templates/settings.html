@@ -916,6 +916,24 @@
 
     </div>
 
+    <div class="card" id="staffUsersCard">
+        <div class="card-header"><h3><i class="fa-solid fa-users-gear"></i> Staff Logins & Permissions</h3></div>
+        <form id="staffUserForm" class="form-grid">
+            <div class="form-group"><label>Full name</label><input name="full_name" maxlength="100" required></div>
+            <div class="form-group"><label>Username</label><input name="username" maxlength="60" required></div>
+            <div class="form-group"><label>Initial password (10+ characters)</label><input name="password" type="password" minlength="10" required></div>
+            <div class="form-group"><label>Role</label><select name="role"><option>Cashier</option><option>Kitchen</option><option>Manager</option></select></div>
+            <div class="form-group"><button class="primary-btn" type="submit">Create staff login</button></div>
+        </form>
+        <div id="staffUsersList" class="audit-log-entries"><p>Loading users…</p></div>
+    </div>
+
+    <div class="card" id="integrationStatusCard">
+        <div class="card-header"><h3><i class="fa-solid fa-plug"></i> Integrations & Data Storage</h3></div>
+        <p>Provider integrations only become active after the provider approves the cafe and issues credentials.</p>
+        <div id="integrationStatusList" class="audit-log-entries"><p>Loading connection status…</p></div>
+    </div>
+
     <!-- =====================================
             BACKUP & RESTORE
     ===================================== -->
@@ -959,11 +977,16 @@
             <input
                 type="file"
                 id="restoreFile"
-                accept=".sql,.db,.sqlite"
+                accept=".db,.sqlite,.sqlite3"
                 hidden>
 
         </div>
 
+    </div>
+
+    <div class="card" id="auditLogCard">
+        <div class="card-header"><h3><i class="fa-solid fa-list-check"></i> Recent Activity</h3></div>
+        <div id="auditLogEntries" class="audit-log-entries"><p>Loading recent activity…</p></div>
     </div>
 
     <!-- =====================================

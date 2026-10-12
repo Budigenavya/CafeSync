@@ -3584,3 +3584,4 @@ body.dark .loading p{
 }
 
 }
+.audit-log-entries{display:grid;max-height:280px;overflow:auto}.audit-log-entry{display:grid;grid-template-columns:120px 1fr auto;gap:12px;align-items:center;padding:10px 4px;border-bottom:1px solid #e8ece9;font-size:12px}.audit-log-entry time{color:#738078;font-size:11px}@media(max-width:600px){.audit-log-entry{grid-template-columns:1fr;gap:3px}}

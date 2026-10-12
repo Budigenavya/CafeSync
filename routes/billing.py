@@ -10,7 +10,12 @@ from flask import (
     Blueprint,
     jsonify,
     request,
-    render_template
+    render_template,
+    render_template_string,
+    send_file,
+    current_app,
+    url_for,
+    session
 )
 
 from database import get_connection
@@ -20,6 +25,8 @@ import sqlite3
 import re
 import json
 import math
+import secrets
+from io import BytesIO
 
 from datetime import datetime
 
@@ -35,8 +42,8 @@ billing_bp = Blueprint(
     url_prefix="/billing"
 )
 
-print("🔥 BILLING BLUEPRINT CREATED")
-print("🔥 BILLING FILE:", __file__)
+print(" BILLING BLUEPRINT CREATED")
+print(" BILLING FILE:", __file__)
 
 # ==========================================================
 # HELPER
@@ -45,6 +52,47 @@ print("🔥 BILLING FILE:", __file__)
 def dict_from_row(row):
 
     return dict(zip(row.keys(), row))
+
+
+def invoice_payload(conn, order_id):
+    order = conn.execute("""
+        SELECT o.*, c.name AS customer_name, c.phone AS customer_phone,
+               t.table_name AS table_name
+        FROM orders o
+        LEFT JOIN customers c ON c.id=o.customer_id
+        LEFT JOIN tables t ON t.id=o.table_id
+        WHERE o.id=?
+    """, (order_id,)).fetchone()
+    if not order:
+        return None
+    items = conn.execute("""
+        SELECT p.name, oi.quantity, oi.price, oi.chef_note, oi.addons
+        FROM order_items oi
+        LEFT JOIN products p ON p.id=oi.product_id
+        WHERE oi.order_id=? ORDER BY oi.id
+    """, (order_id,)).fetchall()
+    item_data = []
+    for row in items:
+        item = dict(row)
+        item["name"] = item.get("name") or "Deleted menu item"
+        item["quantity"] = int(item.get("quantity") or 0)
+        item["price"] = float(item.get("price") or 0)
+        item["total"] = round(item["price"] * item["quantity"], 2)
+        item_data.append(item)
+    data = dict(order)
+    data["items"] = item_data
+    data["customer"] = {
+        "name": data.pop("customer_name", None) or "Walk-in Customer",
+        "phone": data.pop("customer_phone", None) or ""
+    }
+    data["invoice_date"] = data.get("created_at") or ""
+    data["summary"] = {
+        "subtotal": float(data.get("subtotal") or 0),
+        "gst": float(data.get("gst") or 0),
+        "discount": float(data.get("discount") or 0),
+        "grand_total": float(data.get("total") or 0)
+    }
+    return data
 
 
 def validate_billing_totals(cursor, subtotal, gst, discount, total):
@@ -151,7 +199,9 @@ def held_orders():
         finally:
             conn.close()
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "message": "Held order details are invalid."}), 400
     items = data.get("items")
     if not isinstance(items, list) or not items:
         return jsonify({"success": False, "message": "A held order must include at least one item."}), 400
@@ -333,8 +383,13 @@ def get_products():
         products = []
 
         for row in rows:
-
-            products.append(dict_from_row(row))
+            product = dict_from_row(row)
+            product["image_url"] = url_for("inventory.product_image", filename=product["image"]) if product.get("image") else None
+            try:
+                product["is_billable"] = math.isfinite(float(product.get("price")))
+            except (TypeError, ValueError):
+                product["is_billable"] = False
+            products.append(product)
 
         return jsonify({
 
@@ -395,37 +450,72 @@ def lookup_order():
 
 @billing_bp.route("/create-order", methods=["POST"])
 def create_order():
-
+    conn = None
+    error_id = secrets.token_hex(4)
     try:
-
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "message": "Order details were missing or invalid. Refresh the POS and try again."}), 400
 
         items = data.get("items", [])
+        if not isinstance(items, list):
+            return jsonify({"success": False, "message": "Order items were invalid. Refresh the POS and try again."}), 400
 
-        subtotal = float(data.get("subtotal", 0))
-        gst = float(data.get("gst", 0))
-        discount = float(data.get("discount", 0))
-        total = float(data.get("total", 0))
+        try:
+            subtotal = float(data.get("subtotal", 0))
+            gst = float(data.get("gst", 0))
+            discount = float(data.get("discount", 0))
+            total = float(data.get("total", 0))
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "message": "Bill totals must be valid amounts."}), 400
+        if not all(math.isfinite(value) for value in (subtotal, gst, discount, total)) or min(subtotal, gst, discount, total) < 0:
+            return jsonify({"success": False, "message": "Bill totals must be valid non-negative amounts."}), 400
 
         payment_method = data.get(
             "payment_method",
             "Cash"
         )
+        if not isinstance(payment_method, str) or payment_method.strip() not in {"Cash", "Card", "Other", "UPI", "Wallet", "Paytm EDC", "Split"}:
+            return jsonify({"success": False, "message": "Choose a valid payment method."}), 400
+        payment_method = payment_method.strip()
+        is_paid = data.get("is_paid", False)
+        if not isinstance(is_paid, bool):
+            return jsonify({"success": False, "message": "Payment status must be selected explicitly."}), 400
+        if is_paid and payment_method == "Split":
+            return jsonify({"success": False, "message": "Record split payments using the split payment flow."}), 400
 
-        table_id = data.get("table_id") or None
-        if table_id is not None:
-            table_id = int(table_id)
+        table_value = data.get("table_id")
+        if table_value in (None, ""):
+            table_id = None
+        else:
+            try:
+                table_id = int(table_value)
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "message": "Choose a valid table."}), 400
+            if table_id <= 0:
+                return jsonify({"success": False, "message": "Choose a valid table."}), 400
 
         order_type = data.get("order_type")
         if not order_type:
             order_type = "Dine In" if table_id else data.get("table", "Take Away")
+        if not isinstance(order_type, str) or order_type not in {"Dine In", "Parcel", "Delivery", "Take Away"}:
+            return jsonify({"success": False, "message": "Choose a valid order type."}), 400
 
-        payment_status = "Paid" if data.get("is_paid") else "Pending"
+        order_source = data.get("order_source", "Cafe")
+        if not isinstance(order_source, str) or order_source not in {"Cafe", "Swiggy", "Zomato"}:
+            return jsonify({"success": False, "message": "Choose a valid order source."}), 400
+        if order_source in {"Swiggy", "Zomato"} and order_type != "Delivery":
+            return jsonify({"success": False, "message": "Swiggy and Zomato orders must use Delivery order type."}), 400
+        order_status = "Pending" if order_type == "Delivery" and order_source in {"Swiggy", "Zomato"} else "Completed"
+
+        payment_status = "Paid" if is_paid else "Pending"
 
         customer = data.get(
             "customer",
             "Walk-in"
         )
+        if customer is not None and not isinstance(customer, str):
+            return jsonify({"success": False, "message": "Customer name or phone must be text."}), 400
 
         if len(items) == 0:
 
@@ -435,11 +525,40 @@ def create_order():
 
                 "message": "Cart Empty"
 
-            })
+            }), 400
 
         conn = get_connection()
 
         cursor = conn.cursor()
+
+        if table_id is not None:
+            selected_table = cursor.execute("SELECT status FROM tables WHERE id=?", (table_id,)).fetchone()
+            if not selected_table:
+                conn.close()
+                return jsonify({"success": False, "message": "The selected table no longer exists."}), 409
+            if selected_table[0] not in ("Available", "Occupied"):
+                conn.close()
+                return jsonify({"success": False, "message": "The selected table is not available for a new order."}), 409
+
+        ingredient_demand = {}
+        for cart_item in items:
+            try:
+                recipe_product_id = int(cart_item.get("id"))
+                recipe_quantity = int(cart_item.get("quantity"))
+            except (TypeError, ValueError, AttributeError):
+                conn.close()
+                return jsonify({"success": False, "message": "An order item has invalid details."}), 400
+            if recipe_product_id <= 0 or recipe_quantity <= 0:
+                conn.close()
+                return jsonify({"success": False, "message": "An order item has invalid details."}), 400
+            for recipe in cursor.execute("SELECT ingredient_id, quantity FROM recipes WHERE product_id=?", (recipe_product_id,)).fetchall():
+                ingredient_demand[recipe[0]] = ingredient_demand.get(recipe[0], 0) + float(recipe[1]) * recipe_quantity
+        for ingredient_id, required_quantity in ingredient_demand.items():
+            available = cursor.execute("SELECT name, current_stock FROM ingredients WHERE id=? AND active=1", (ingredient_id,)).fetchone()
+            if not available or float(available["current_stock"]) + 1e-9 < required_quantity:
+                conn.close()
+                label = available["name"] if available else "recipe ingredient"
+                return jsonify({"success": False, "message": f"Insufficient ingredient stock: {label}."}), 409
 
         selected_customer_id = data.get("customer_id")
         if selected_customer_id not in (None, ""):
@@ -470,6 +589,8 @@ def create_order():
 
                 order_type,
 
+                order_source,
+
                 subtotal,
 
                 gst,
@@ -488,7 +609,7 @@ def create_order():
 
             VALUES(
 
-                ?,?,?,?,?,?,?,?,?,?,?
+                ?,?,?,?,?,?,?,?,?,?,?,?
 
             )
 
@@ -502,6 +623,8 @@ def create_order():
 
             order_type,
 
+            order_source,
+
             subtotal,
 
             gst,
@@ -514,7 +637,7 @@ def create_order():
 
             payment_status,
 
-            "Pending"
+            order_status
 
         ))
 
@@ -533,16 +656,27 @@ def create_order():
         calculated_subtotal = 0.0
 
         for item in items:
+            if not isinstance(item, dict):
+                conn.rollback()
+                conn.close()
+                return jsonify({"success": False, "message": "An order item is invalid."}), 400
+            try:
+                product_id = int(item["id"])
+                quantity = int(item["quantity"])
+                price = float(item["price"])
+            except (KeyError, TypeError, ValueError):
+                conn.rollback()
+                conn.close()
+                return jsonify({"success": False, "message": "An order item has invalid details."}), 400
+            if product_id <= 0 or not math.isfinite(price) or price < 0:
+                conn.rollback()
+                conn.close()
+                return jsonify({"success": False, "message": "An order item has invalid details."}), 400
 
-            product_id = item["id"]
-
-            quantity = int(item["quantity"])
             if quantity <= 0:
                 conn.rollback()
                 conn.close()
                 return jsonify({"success": False, "message": "Item quantity must be at least one."}), 400
-
-            price = float(item["price"])
 
             # ----------------------------------------------
             # CHECK STOCK
@@ -572,9 +706,9 @@ def create_order():
 
                     "message": f"Product {product_id} not found."
 
-                })
+                }), 409
 
-            current_stock = stock_row["stock"]
+            current_stock = int(stock_row["stock"] or 0)
 
             if not stock_row["is_available"]:
                 conn.rollback()
@@ -596,7 +730,7 @@ def create_order():
 
                     "message": "Insufficient stock."
 
-                })
+                }), 409
 
             try:
                 selected_addons = resolve_item_addons(cursor, product_id, item)
@@ -705,6 +839,18 @@ def create_order():
 
             ))
 
+            recipe_rows = cursor.execute(
+                "SELECT ingredient_id, quantity FROM recipes WHERE product_id=?",
+                (product_id,)
+            ).fetchall()
+            for recipe in recipe_rows:
+                used = float(recipe["quantity"]) * quantity
+                cursor.execute("UPDATE ingredients SET current_stock=current_stock-? WHERE id=?", (used, recipe["ingredient_id"]))
+                cursor.execute("""
+                    INSERT INTO ingredient_movements(ingredient_id,quantity_change,movement_type,reference,order_id,actor)
+                    VALUES(?,?,'SALE',?,?,?)
+                """, (recipe["ingredient_id"], -used, bill_no, order_id, session.get("username", "")))
+
         # ======================================================
         # COMMIT
         # ======================================================
@@ -734,6 +880,10 @@ def create_order():
         if table_id:
             cursor.execute("UPDATE tables SET status='Occupied' WHERE id=?", (table_id,))
 
+        cursor.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
+                       (session.get("username", ""), "order_created", "order", str(order_id),
+                        json.dumps({"bill_no": bill_no, "total": total, "status": "Pending"})))
+
         conn.commit()
 
         conn.close()
@@ -750,24 +900,18 @@ def create_order():
 
         })
 
-    except sqlite3.Error as e:
-
+    except Exception:
+        if conn is not None:
+            try:
+                conn.rollback()
+                conn.close()
+            except sqlite3.Error:
+                pass
+        current_app.logger.exception("Order creation failed (reference %s)", error_id)
         return jsonify({
-
             "success": False,
-
-            "message": str(e)
-
-        }), 500
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success": False,
-
-            "message": str(e)
-
+            "message": "Order could not be saved. Please retry and share the error reference with support if it happens again.",
+            "error_id": error_id
         }), 500
 # ==========================================================
 # GET ALL ORDERS
@@ -915,44 +1059,23 @@ def get_order(order_id):
 
 @billing_bp.route("/hold/<int:order_id>", methods=["PUT"])
 def hold_order(order_id):
-
+    conn = get_connection()
     try:
-
-        conn = get_connection()
-
         cursor = conn.cursor()
-
-        cursor.execute("""
-
-            UPDATE orders
-
-            SET status='Hold'
-
-            WHERE id=?
-
-        """,(order_id,))
-
+        order = cursor.execute("SELECT status, payment_status FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not order:
+            return jsonify({"success": False, "message": "Order not found."}), 404
+        if order[0] in ("Cancelled", "Refunded", "Completed") or order[1] == "Paid":
+            return jsonify({"success": False, "message": "This order cannot be put on hold."}), 409
+        cursor.execute("UPDATE orders SET status='Hold' WHERE id=?", (order_id,))
         conn.commit()
-
+        return jsonify({"success": True, "message": "Order held."})
+    except sqlite3.Error:
+        conn.rollback()
+        current_app.logger.exception("Could not hold order %s", order_id)
+        return jsonify({"success": False, "message": "Unable to hold this order."}), 500
+    finally:
         conn.close()
-
-        return jsonify({
-
-            "success":True,
-
-            "message":"Order Held"
-
-        })
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success":False,
-
-            "message":str(e)
-
-        }),500
 
 
 # ==========================================================
@@ -961,44 +1084,23 @@ def hold_order(order_id):
 
 @billing_bp.route("/resume/<int:order_id>", methods=["PUT"])
 def resume_order(order_id):
-
+    conn = get_connection()
     try:
-
-        conn = get_connection()
-
         cursor = conn.cursor()
-
-        cursor.execute("""
-
-            UPDATE orders
-
-            SET status='Pending'
-
-            WHERE id=?
-
-        """,(order_id,))
-
+        order = cursor.execute("SELECT status FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not order:
+            return jsonify({"success": False, "message": "Order not found."}), 404
+        if order[0] != "Hold":
+            return jsonify({"success": False, "message": "Only held orders can be resumed."}), 409
+        cursor.execute("UPDATE orders SET status='Pending' WHERE id=?", (order_id,))
         conn.commit()
-
+        return jsonify({"success": True, "message": "Order resumed."})
+    except sqlite3.Error:
+        conn.rollback()
+        current_app.logger.exception("Could not resume order %s", order_id)
+        return jsonify({"success": False, "message": "Unable to resume this order."}), 500
+    finally:
         conn.close()
-
-        return jsonify({
-
-            "success":True,
-
-            "message":"Order Resumed"
-
-        })
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success":False,
-
-            "message":str(e)
-
-        }),500
 
 
 # ==========================================================
@@ -1007,122 +1109,70 @@ def resume_order(order_id):
 
 @billing_bp.route("/cancel/<int:order_id>", methods=["PUT"])
 def cancel_order(order_id):
-
+    conn = get_connection()
     try:
-
-        conn = get_connection()
-
         cursor = conn.cursor()
-
-        cursor.execute("""
-
-            SELECT
-
-                product_id,
-
-                quantity
-
-            FROM order_items
-
-            WHERE order_id=?
-
-        """,(order_id,))
-
-        items = cursor.fetchall()
-
+        order = cursor.execute("SELECT status, payment_status, table_id FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not order:
+            return jsonify({"success": False, "message": "Order not found."}), 404
+        if order[0] in ("Cancelled", "Refunded", "Served", "Completed"):
+            return jsonify({"success": False, "message": "This order is already closed."}), 409
+        if order[1] in ("Paid", "Partial"):
+            return jsonify({"success": False, "message": "Paid orders must be refunded instead of cancelled."}), 409
+        items = cursor.execute("SELECT product_id, quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall()
         for item in items:
-
-            cursor.execute("""
-
-                UPDATE products
-
-                SET stock = stock + ?
-
-                WHERE id = ?
-
-            """,(
-
-                item["quantity"],
-
-                item["product_id"]
-
-            ))
-
-        cursor.execute("""
-
-            UPDATE orders
-
-            SET status='Cancelled'
-
-            WHERE id=?
-
-        """,(order_id,))
-
+            cursor.execute("UPDATE products SET stock=stock+? WHERE id=?", (item["quantity"], item["product_id"]))
+            cursor.execute("INSERT INTO inventory_logs(product_id, quantity, action, remarks) VALUES (?, ?, 'CANCEL', ?)",
+                           (item["product_id"], item["quantity"], f"Cancelled order {order_id}"))
+        ingredient_sales = cursor.execute("""
+            SELECT ingredient_id, -SUM(quantity_change) AS quantity
+            FROM ingredient_movements WHERE order_id=? AND movement_type='SALE'
+            GROUP BY ingredient_id
+        """, (order_id,)).fetchall()
+        for movement in ingredient_sales:
+            cursor.execute("UPDATE ingredients SET current_stock=current_stock+? WHERE id=?", (movement["quantity"], movement["ingredient_id"]))
+            cursor.execute("INSERT INTO ingredient_movements(ingredient_id,quantity_change,movement_type,reference,order_id,actor) VALUES(?,?,'CANCEL',?,?,?)",
+                           (movement["ingredient_id"], movement["quantity"], f"Cancelled order {order_id}", order_id, session.get("username", "")))
+        cursor.execute("UPDATE orders SET status='Cancelled', payment_status='Cancelled', cancelled_at=CURRENT_TIMESTAMP WHERE id=?", (order_id,))
+        cursor.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
+                       (session.get("username", ""), "order_cancelled", "order", str(order_id), "{}"))
+        if order[2] is not None:
+            active = cursor.execute("SELECT 1 FROM orders WHERE table_id=? AND id<>? AND status NOT IN ('Cancelled','Refunded','Completed') LIMIT 1", (order[2], order_id)).fetchone()
+            if not active:
+                cursor.execute("UPDATE tables SET status='Available' WHERE id=?", (order[2],))
         conn.commit()
-
+        return jsonify({"success": True, "message": "Order cancelled and stock restored."})
+    except sqlite3.Error:
+        conn.rollback()
+        current_app.logger.exception("Could not cancel order %s", order_id)
+        return jsonify({"success": False, "message": "Unable to cancel this order."}), 500
+    finally:
         conn.close()
-
-        return jsonify({
-
-            "success":True,
-
-            "message":"Order Cancelled"
-
-        })
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success":False,
-
-            "message":str(e)
-
-        }),500
 # ==========================================================
 # COMPLETE ORDER
 # ==========================================================
 
 @billing_bp.route("/complete/<int:order_id>", methods=["PUT"])
 def complete_order(order_id):
-
+    conn = get_connection()
     try:
-
-        conn = get_connection()
-
         cursor = conn.cursor()
-
-        cursor.execute("""
-
-            UPDATE orders
-
-            SET status='Completed'
-
-            WHERE id=?
-
-        """, (order_id,))
-
+        order = cursor.execute("SELECT status FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not order:
+            return jsonify({"success": False, "message": "Order not found."}), 404
+        if order[0] in ("Cancelled", "Refunded"):
+            return jsonify({"success": False, "message": "Closed orders cannot be completed."}), 409
+        cursor.execute("UPDATE orders SET status='Completed' WHERE id=?", (order_id,))
+        cursor.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
+                       (session.get("username", ""), "order_completed", "order", str(order_id), "{}"))
         conn.commit()
-
+        return jsonify({"success": True, "message": "Order completed."})
+    except sqlite3.Error:
+        conn.rollback()
+        current_app.logger.exception("Could not complete order %s", order_id)
+        return jsonify({"success": False, "message": "Unable to complete this order."}), 500
+    finally:
         conn.close()
-
-        return jsonify({
-
-            "success": True,
-
-            "message": "Order Completed"
-
-        })
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success": False,
-
-            "message": str(e)
-
-        }),500
 
 
 # ==========================================================
@@ -1131,9 +1181,11 @@ def complete_order(order_id):
 
 @billing_bp.route("/split-payment/<int:order_id>", methods=["POST"])
 def record_split_payments(order_id):
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "message": "Split payment details are invalid."}), 400
     shares = data.get("shares") or []
-    if not isinstance(shares, list):
+    if not isinstance(shares, list) or not shares:
         return jsonify({"success": False, "message": "Split payment details are invalid."}), 400
 
     conn = get_connection()
@@ -1146,6 +1198,8 @@ def record_split_payments(order_id):
             return jsonify({"success": False, "message": "Order not found."}), 404
         if order[2] in ("Cancelled", "Refunded") or order[1] in ("Refunded",):
             return jsonify({"success": False, "message": "This order cannot accept payments."}), 409
+        if order[1] == "Paid":
+            return jsonify({"success": False, "message": "This order is already fully paid."}), 409
         if not order[3]:
             return jsonify({"success": False, "message": "Saved item split details were not found."}), 409
         split_people = {str(person["person_number"]): float(person["amount"])
@@ -1214,78 +1268,50 @@ def record_split_payments(order_id):
 
 @billing_bp.route("/payment/<int:order_id>", methods=["POST"])
 def make_payment(order_id):
-
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "message": "Payment details are invalid."}), 400
+    raw_method = data.get("payment_type", "Cash")
+    if not isinstance(raw_method, str):
+        return jsonify({"success": False, "message": "Choose a valid payment method."}), 400
+    payment_method = raw_method.strip()
+    if payment_method not in {"Cash", "Card", "Other", "UPI", "Wallet", "Paytm EDC"}:
+        return jsonify({"success": False, "message": "Choose a valid payment method."}), 400
     try:
+        amount = float(data.get("amount", 0))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "Enter a valid payment amount."}), 400
+    if not math.isfinite(amount) or amount <= 0:
+        return jsonify({"success": False, "message": "Payment amount must be greater than zero."}), 400
 
-        data = request.get_json()
-
-        payment_type = data.get("payment_type","Cash")
-
-        amount = float(data.get("amount",0))
-
-        conn = get_connection()
-
+    conn = get_connection()
+    try:
         cursor = conn.cursor()
-
-        cursor.execute("""
-
-            INSERT INTO payments(
-
-                order_id,
-
-                payment_type,
-
-                amount
-
-            )
-
-            VALUES(
-
-                ?,?,?
-
-            )
-
-        """,(
-
-            order_id,
-
-            payment_type,
-
-            amount
-
-        ))
-
-        cursor.execute("""
-
-            UPDATE orders
-
-            SET status='Paid'
-
-            WHERE id=?
-
-        """,(order_id,))
-
+        order = cursor.execute("SELECT total, status, payment_status FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not order:
+            return jsonify({"success": False, "message": "Order not found."}), 404
+        if order[1] in ("Cancelled", "Refunded") or order[2] == "Refunded":
+            return jsonify({"success": False, "message": "This order cannot accept payments."}), 409
+        if order[2] == "Paid":
+            return jsonify({"success": False, "message": "This order is already fully paid."}), 409
+        already_paid = float(cursor.execute("SELECT COALESCE(SUM(amount),0) FROM payments WHERE order_id=? AND payment_status='Paid'", (order_id,)).fetchone()[0] or 0)
+        due = max(0.0, float(order[0] or 0) - already_paid)
+        if amount > due + 0.02:
+            return jsonify({"success": False, "message": f"Payment exceeds the remaining balance of ₹{due:.2f}."}), 409
+        cursor.execute("INSERT INTO payments(order_id, payment_type, amount, payment_status) VALUES (?, ?, ?, 'Paid')", (order_id, payment_method, amount))
+        total_paid = already_paid + amount
+        new_status = "Paid" if total_paid >= float(order[0] or 0) - 0.02 else "Partial"
+        payment_methods = {row[0] for row in cursor.execute("SELECT DISTINCT payment_type FROM payments WHERE order_id=? AND payment_status='Paid'", (order_id,)).fetchall()}
+        cursor.execute("UPDATE orders SET payment_status=?, payment_method=? WHERE id=?", (new_status, next(iter(payment_methods)) if len(payment_methods) == 1 else "Split", order_id))
         conn.commit()
-
+        return jsonify({"success": True, "message": "Payment recorded.", "payment_status": new_status,
+                        "paid": round(total_paid, 2), "remaining": round(max(0.0, float(order[0] or 0) - total_paid), 2)})
+    except sqlite3.Error:
+        conn.rollback()
+        current_app.logger.exception("Could not record payment for order %s", order_id)
+        return jsonify({"success": False, "message": "Unable to record this payment."}), 500
+    finally:
         conn.close()
-
-        return jsonify({
-
-            "success":True,
-
-            "message":"Payment Successful"
-
-        })
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success":False,
-
-            "message":str(e)
-
-        }),500
 
 
 # ==========================================================
@@ -1311,9 +1337,10 @@ def today_sales():
 
             FROM orders
 
-            WHERE DATE(created_at)=DATE('now')
+            WHERE DATE(created_at,'+5 hours','+30 minutes')=DATE('now','+5 hours','+30 minutes')
 
-            AND status IN ('Completed','Paid')
+            AND payment_status='Paid'
+            AND status NOT IN ('Cancelled','Refunded')
 
         """)
 
@@ -1393,7 +1420,8 @@ def dashboard_stats():
 
             FROM orders
 
-            WHERE status IN ('Completed','Paid')
+            WHERE payment_status='Paid'
+              AND status NOT IN ('Cancelled','Refunded')
 
         """)
 
@@ -1446,6 +1474,10 @@ def top_products():
             JOIN products
 
             ON products.id = order_items.product_id
+
+            JOIN orders ON orders.id = order_items.order_id
+
+            WHERE orders.status NOT IN ('Cancelled','Refunded')
 
             GROUP BY products.id
 
@@ -1503,13 +1535,13 @@ def customer_history(name):
 
                 FROM customers
 
-                WHERE name=?
+                WHERE name=? COLLATE NOCASE OR phone=?
 
             )
 
             ORDER BY created_at DESC
 
-        """,(name,))
+        """, (name, name))
 
         rows = cursor.fetchall()
 
@@ -1588,135 +1620,73 @@ def search_bill():
 
 @billing_bp.route("/delete/<int:order_id>", methods=["DELETE"])
 def delete_order(order_id):
-
+    conn = get_connection()
     try:
-
-        conn = get_connection()
-
         cursor = conn.cursor()
-
-        # Restore stock
-        cursor.execute("""
-
-            SELECT product_id, quantity
-
-            FROM order_items
-
-            WHERE order_id = ?
-
-        """, (order_id,))
-
-        items = cursor.fetchall()
-
-        for item in items:
-
-            cursor.execute("""
-
-                UPDATE products
-
-                SET stock = stock + ?
-
-                WHERE id = ?
-
-            """, (
-
-                item["quantity"],
-
-                item["product_id"]
-
-            ))
-
-        cursor.execute("""
-
-            DELETE FROM order_items
-
-            WHERE order_id = ?
-
-        """, (order_id,))
-
-        cursor.execute("""
-
-            DELETE FROM payments
-
-            WHERE order_id = ?
-
-        """, (order_id,))
-
-        cursor.execute("""
-
-            DELETE FROM orders
-
-            WHERE id = ?
-
-        """, (order_id,))
-
+        order = cursor.execute("SELECT status, payment_status, table_id FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not order:
+            return jsonify({"success": False, "message": "Order not found."}), 404
+        if order[1] in ("Paid", "Partial") or order[0] in ("Completed", "Served", "Refunded"):
+            return jsonify({"success": False, "message": "Paid or completed orders must be retained for the sales audit."}), 409
+        items = cursor.execute("SELECT product_id, quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall()
+        if order[0] != "Cancelled":
+            for item in items:
+                cursor.execute("UPDATE products SET stock=stock+? WHERE id=?", (item["quantity"], item["product_id"]))
+                cursor.execute("INSERT INTO inventory_logs(product_id, quantity, action, remarks) VALUES (?, ?, 'DELETE', ?)",
+                               (item["product_id"], item["quantity"], f"Deleted order {order_id}"))
+        cursor.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
+        cursor.execute("DELETE FROM payments WHERE order_id=?", (order_id,))
+        cursor.execute("DELETE FROM orders WHERE id=?", (order_id,))
+        if order[2] is not None:
+            active = cursor.execute("SELECT 1 FROM orders WHERE table_id=? AND status NOT IN ('Cancelled','Refunded','Completed') LIMIT 1", (order[2],)).fetchone()
+            if not active:
+                cursor.execute("UPDATE tables SET status='Available' WHERE id=?", (order[2],))
         conn.commit()
-
+        return jsonify({"success": True, "message": "Unpaid order deleted and stock restored."})
+    except sqlite3.Error:
+        conn.rollback()
+        current_app.logger.exception("Could not delete order %s", order_id)
+        return jsonify({"success": False, "message": "Unable to delete this order."}), 500
+    finally:
         conn.close()
-
-        return jsonify({
-
-            "success": True,
-
-            "message": "Order Deleted Successfully"
-
-        })
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success": False,
-
-            "message": str(e)
-
-        }), 500
 
 
 # ==========================================================
 # REFUND ORDER
 # ==========================================================
 
-@billing_bp.route("/refund/<int:order_id>", methods=["PUT"])
+@billing_bp.route("/refund/<int:order_id>", methods=["PUT", "POST"])
 def refund_order(order_id):
-
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "message": "Refund details are invalid."}), 400
+    reason = str(data.get("reason", "")).strip()[:500]
+    if not reason:
+        return jsonify({"success": False, "message": "A refund reason is required."}), 400
+    conn = get_connection()
     try:
-
-        conn = get_connection()
-
         cursor = conn.cursor()
-
-        cursor.execute("""
-
-            UPDATE orders
-
-            SET status='Refunded'
-
-            WHERE id = ?
-
-        """, (order_id,))
-
+        order = cursor.execute("SELECT total, status, payment_status, payment_method FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not order:
+            return jsonify({"success": False, "message": "Order not found."}), 404
+        if order[1] not in ("Completed", "Served"):
+            return jsonify({"success": False, "message": "Only completed or served orders can be refunded."}), 409
+        if str(order[2] or "").lower() != "paid":
+            return jsonify({"success": False, "message": "Only fully paid orders can be refunded."}), 409
+        amount = float(order[0] or 0)
+        cursor.execute("UPDATE orders SET status='Refunded', payment_status='Refunded', refund_reason=?, refunded_at=CURRENT_TIMESTAMP WHERE id=?", (reason, order_id))
+        cursor.execute("INSERT INTO payments(order_id, payment_type, amount, payment_status) VALUES (?, ?, ?, 'Refunded')",
+                       (order_id, order[3] or "Other", -amount))
+        cursor.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
+                       (session.get("username", ""), "order_refunded", "order", str(order_id), json.dumps({"reason": reason, "amount": amount})))
         conn.commit()
-
+        return jsonify({"success": True, "message": "Refund recorded.", "amount": amount})
+    except sqlite3.Error:
+        conn.rollback()
+        current_app.logger.exception("Could not refund order %s", order_id)
+        return jsonify({"success": False, "message": "Unable to record this refund."}), 500
+    finally:
         conn.close()
-
-        return jsonify({
-
-            "success": True,
-
-            "message": "Refund Completed"
-
-        })
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success": False,
-
-            "message": str(e)
-
-        }), 500
 
 
 # ==========================================================
@@ -1730,6 +1700,13 @@ def sales_report():
 
         start = request.args.get("start")
         end = request.args.get("end")
+        try:
+            start_date = datetime.strptime(start or "", "%Y-%m-%d").date()
+            end_date = datetime.strptime(end or "", "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"success": False, "message": "Choose a valid start and end date."}), 400
+        if start_date > end_date:
+            return jsonify({"success": False, "message": "The start date must be on or before the end date."}), 400
 
         conn = get_connection()
 
@@ -1741,7 +1718,7 @@ def sales_report():
 
             FROM orders
 
-            WHERE DATE(created_at)
+            WHERE DATE(created_at,'+5 hours','+30 minutes')
 
             BETWEEN ? AND ?
 
@@ -1803,6 +1780,10 @@ def receipt(order_id):
 
         order = cursor.fetchone()
 
+        if order is None:
+            conn.close()
+            return jsonify({"success": False, "message": "Order not found."}), 404
+
         cursor.execute("""
 
             SELECT
@@ -1852,6 +1833,248 @@ def receipt(order_id):
         }), 500
 
 
+# Dashboard billing APIs. Keep their list and invoice shapes stable for the
+# existing dashboard.js consumers.
+@billing_bp.route("/recent", methods=["GET"])
+def recent_bills():
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT o.id, o.bill_no, COALESCE(c.name, 'Walk-in Customer') AS customer,
+                   o.order_type, o.total, o.payment_method, o.payment_status,
+                   o.status, o.created_at
+            FROM orders o LEFT JOIN customers c ON c.id=o.customer_id
+            ORDER BY o.id DESC LIMIT 50
+        """).fetchall()
+        return jsonify([dict(row) for row in rows])
+    except sqlite3.Error:
+        current_app.logger.exception("Could not load recent bills")
+        return jsonify({"success": False, "message": "Unable to load recent bills."}), 500
+    finally:
+        conn.close()
+
+
+@billing_bp.route("/invoice/<int:order_id>", methods=["GET"])
+def get_invoice(order_id):
+    conn = get_connection()
+    try:
+        invoice = invoice_payload(conn, order_id)
+        if invoice is None:
+            return jsonify({"success": False, "message": "Invoice not found."}), 404
+        return jsonify({"success": True, "invoice": invoice})
+    except sqlite3.Error:
+        current_app.logger.exception("Could not load invoice %s", order_id)
+        return jsonify({"success": False, "message": "Unable to load this invoice."}), 500
+    finally:
+        conn.close()
+
+
+@billing_bp.route("/print/<int:order_id>", methods=["GET"])
+def print_invoice(order_id):
+    conn = get_connection()
+    try:
+        invoice = invoice_payload(conn, order_id)
+        if invoice is None:
+            return jsonify({"success": False, "message": "Invoice not found."}), 404
+        return render_template_string("""<!doctype html><html><head><meta charset='utf-8'><title>Invoice {{ invoice.bill_no }}</title>
+        <style>body{font:14px Arial,sans-serif;max-width:720px;margin:32px auto;color:#222}header{text-align:center}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}td:last-child,th:last-child{text-align:right}.totals{margin-left:auto;width:260px}.totals div{display:flex;justify-content:space-between;padding:5px}@media print{button{display:none}body{margin:0}}</style></head><body>
+        <header><h1>CafeSync</h1><p>Invoice</p></header><p><b>Bill:</b> {{ invoice.bill_no }} &nbsp; <b>Date:</b> {{ invoice.invoice_date }}</p>
+        <p><b>Customer:</b> {{ invoice.customer.name }} &nbsp; <b>Phone:</b> {{ invoice.customer.phone }}</p><p><b>Order:</b> {{ invoice.order_type }}{% if invoice.table_name %} · {{ invoice.table_name }}{% endif %} &nbsp; <b>Payment:</b> {{ invoice.payment_method }}</p>
+        <table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>{% for item in invoice.items %}<tr><td>{{ item.name }}{% if item.chef_note %}<br><small>{{ item.chef_note }}</small>{% endif %}</td><td>{{ item.quantity }}</td><td>₹{{ '%.2f'|format(item.price) }}</td><td>₹{{ '%.2f'|format(item.total) }}</td></tr>{% endfor %}</tbody></table>
+        <div class='totals'><div><span>Subtotal</span><span>₹{{ '%.2f'|format(invoice.summary.subtotal) }}</span></div><div><span>GST</span><span>₹{{ '%.2f'|format(invoice.summary.gst) }}</span></div><div><span>Discount</span><span>₹{{ '%.2f'|format(invoice.summary.discount) }}</span></div><div><b>Total</b><b>₹{{ '%.2f'|format(invoice.summary.grand_total) }}</b></div></div><button onclick='window.print()'>Print</button><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),250))</script></body></html>""", invoice=invoice)
+    finally:
+        conn.close()
+
+
+@billing_bp.route("/pdf/<int:order_id>", methods=["GET"])
+def download_invoice_pdf(order_id):
+    conn = get_connection()
+    try:
+        invoice = invoice_payload(conn, order_id)
+        if invoice is None:
+            return jsonify({"success": False, "message": "Invoice not found."}), 404
+    finally:
+        conn.close()
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import mm
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from xml.sax.saxutils import escape
+        output = BytesIO()
+        document = SimpleDocTemplate(output, pagesize=A4, leftMargin=16*mm, rightMargin=16*mm, topMargin=14*mm, bottomMargin=14*mm)
+        styles = getSampleStyleSheet()
+        story = [Paragraph("CafeSync · Tax Invoice", styles["Title"]),
+                 Paragraph(f"Bill: {escape(str(invoice.get('bill_no') or ''))} &nbsp;&nbsp; Date: {escape(str(invoice.get('invoice_date') or ''))}", styles["Normal"]),
+                 Paragraph(f"Customer: {escape(str(invoice['customer']['name']))} &nbsp;&nbsp; Phone: {escape(str(invoice['customer']['phone']))}", styles["Normal"]), Spacer(1, 8*mm)]
+        rows = [["Item", "Qty", "Rate (INR)", "Total (INR)"]]
+        rows.extend([[Paragraph(escape(str(item["name"])), styles["BodyText"]), str(item["quantity"]), f"{item['price']:.2f}", f"{item['total']:.2f}"] for item in invoice["items"]])
+        table = Table(rows, colWidths=[95*mm, 18*mm, 32*mm, 32*mm], repeatRows=1)
+        table.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e8f1eb")), ("GRID", (0,0), (-1,-1), .35, colors.HexColor("#cad5ce")), ("ALIGN", (1,1), (-1,-1), "RIGHT"), ("VALIGN", (0,0), (-1,-1), "TOP"), ("PADDING", (0,0), (-1,-1), 6)]))
+        story.extend([table, Spacer(1, 6*mm)])
+        summary = invoice["summary"]
+        totals = [["Subtotal", f"INR {summary['subtotal']:.2f}"], ["GST", f"INR {summary['gst']:.2f}"], ["Discount", f"INR {summary['discount']:.2f}"], ["Grand total", f"INR {summary['grand_total']:.2f}"]]
+        totals_table = Table(totals, colWidths=[42*mm, 38*mm], hAlign="RIGHT")
+        totals_table.setStyle(TableStyle([("ALIGN", (1,0), (1,-1), "RIGHT"), ("FONTNAME", (0,-1), (-1,-1), "Helvetica-Bold"), ("LINEABOVE", (0,-1), (-1,-1), .8, colors.HexColor("#26372d")), ("PADDING", (0,0), (-1,-1), 5)]))
+        story.append(totals_table)
+        document.build(story)
+        output.seek(0)
+        return send_file(output, mimetype="application/pdf", as_attachment=True, download_name=f"{invoice.get('bill_no') or 'invoice'}.pdf")
+    except Exception:
+        current_app.logger.exception("Could not create PDF for invoice %s", order_id)
+        return jsonify({"success": False, "message": "Unable to create this invoice PDF."}), 500
+
+
+@billing_bp.route("/payment-history/<int:order_id>", methods=["GET"])
+def payment_history(order_id):
+    conn = get_connection()
+    try:
+        if not conn.execute("SELECT 1 FROM orders WHERE id=?", (order_id,)).fetchone():
+            return jsonify({"success": False, "message": "Order not found."}), 404
+        rows = conn.execute("""
+            SELECT payment_type AS payment_method, amount, payment_status AS status, created_at
+            FROM payments WHERE order_id=? ORDER BY id
+        """, (order_id,)).fetchall()
+        history = [dict(row) for row in rows]
+        if not history:
+            legacy = conn.execute("""
+                SELECT payment_method, total AS amount, payment_status AS status, created_at
+                FROM orders WHERE id=? AND payment_status='Paid'
+            """, (order_id,)).fetchone()
+            if legacy:
+                history.append(dict(legacy))
+        return jsonify(history)
+    except sqlite3.Error:
+        current_app.logger.exception("Could not load payment history for order %s", order_id)
+        return jsonify({"success": False, "message": "Unable to load payment history."}), 500
+    finally:
+        conn.close()
+
+
+@billing_bp.route("/live-transactions", methods=["GET"])
+def live_transactions():
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT o.id, o.bill_no, COALESCE(c.name, 'Walk-in Customer') AS customer,
+                   o.total, o.payment_method, o.payment_status, o.status, o.created_at
+            FROM orders o LEFT JOIN customers c ON c.id=o.customer_id
+            WHERE o.status NOT IN ('Cancelled','Refunded')
+            ORDER BY o.id DESC LIMIT 30
+        """).fetchall()
+        return jsonify([dict(row) for row in rows])
+    except sqlite3.Error:
+        current_app.logger.exception("Could not load live transactions")
+        return jsonify({"success": False, "message": "Unable to load transactions."}), 500
+    finally:
+        conn.close()
+
+
+@billing_bp.route("/payment-summary", methods=["GET"])
+def payment_summary():
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT payment_type, SUM(amount) AS amount FROM (
+                SELECT p.payment_type, p.amount FROM payments p
+                JOIN orders o ON o.id=p.order_id
+                WHERE p.payment_status='Paid' AND o.status NOT IN ('Cancelled','Refunded')
+                  AND DATE(p.created_at,'+5 hours','+30 minutes')=DATE('now','+5 hours','+30 minutes')
+                UNION ALL
+                SELECT COALESCE(o.payment_method,'Other'), o.total FROM orders o
+                WHERE o.payment_status='Paid' AND o.status NOT IN ('Cancelled','Refunded')
+                  AND DATE(o.created_at,'+5 hours','+30 minutes')=DATE('now','+5 hours','+30 minutes')
+                  AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id=o.id)
+            ) GROUP BY payment_type
+        """).fetchall()
+        summary = {"cash": 0.0, "upi": 0.0, "card": 0.0, "online": 0.0, "total": 0.0}
+        for row in rows:
+            method = str(row[0] or "Other").strip().lower()
+            amount = float(row[1] or 0)
+            if method == "cash": summary["cash"] += amount
+            elif method == "upi": summary["upi"] += amount
+            elif method == "card": summary["card"] += amount
+            else: summary["online"] += amount
+            summary["total"] += amount
+        return jsonify({key: round(value, 2) for key, value in summary.items()})
+    except sqlite3.Error:
+        current_app.logger.exception("Could not calculate payment summary")
+        return jsonify({"success": False, "message": "Unable to load payment summary."}), 500
+    finally:
+        conn.close()
+
+
+@billing_bp.route("/recent-payments", methods=["GET"])
+def recent_payments():
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT bill_no, customer, payment_method, amount, created_at FROM (
+                SELECT o.id AS sort_id, p.id AS payment_id, o.bill_no,
+                       COALESCE(c.name, 'Walk-in Customer') AS customer,
+                       p.payment_type AS payment_method, p.amount, p.created_at
+                FROM payments p JOIN orders o ON o.id=p.order_id
+                LEFT JOIN customers c ON c.id=o.customer_id
+                WHERE p.payment_status='Paid' AND o.status NOT IN ('Cancelled','Refunded')
+                UNION ALL
+                SELECT o.id AS sort_id, o.id AS payment_id, o.bill_no,
+                       COALESCE(c.name, 'Walk-in Customer') AS customer,
+                       o.payment_method, o.total AS amount, o.created_at
+                FROM orders o LEFT JOIN customers c ON c.id=o.customer_id
+                WHERE o.payment_status='Paid' AND o.status NOT IN ('Cancelled','Refunded')
+                  AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id=o.id)
+            ) ORDER BY sort_id DESC, payment_id DESC LIMIT 30
+        """).fetchall()
+        return jsonify([dict(row) for row in rows])
+    except sqlite3.Error:
+        current_app.logger.exception("Could not load recent payments")
+        return jsonify({"success": False, "message": "Unable to load recent payments."}), 500
+    finally:
+        conn.close()
+
+
+@billing_bp.route("/refunds", methods=["GET"])
+def get_refunds():
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT o.id, o.bill_no, COALESCE(c.name, 'Walk-in Customer') AS customer,
+                   o.total AS amount, o.payment_method, o.refund_reason AS reason,
+                   COALESCE(o.refunded_at, o.created_at) AS created_at
+            FROM orders o LEFT JOIN customers c ON c.id=o.customer_id
+            WHERE o.status='Refunded' OR o.payment_status='Refunded'
+            ORDER BY COALESCE(o.refunded_at,o.created_at) DESC LIMIT 100
+        """).fetchall()
+        return jsonify([dict(row) for row in rows])
+    except sqlite3.Error:
+        current_app.logger.exception("Could not load refunds")
+        return jsonify({"success": False, "message": "Unable to load refund history."}), 500
+    finally:
+        conn.close()
+
+
+@billing_bp.route("/refund-details/<int:order_id>", methods=["GET"])
+def refund_details(order_id):
+    conn = get_connection()
+    try:
+        row = conn.execute("""
+            SELECT o.id, o.bill_no, COALESCE(c.name, 'Walk-in Customer') AS customer,
+                   o.total AS amount, o.payment_method, o.refund_reason AS reason,
+                   COALESCE(o.refunded_at,o.created_at) AS created_at
+            FROM orders o LEFT JOIN customers c ON c.id=o.customer_id
+            WHERE o.id=? AND (o.status='Refunded' OR o.payment_status='Refunded')
+        """, (order_id,)).fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "Refund record not found."}), 404
+        return jsonify(dict(row))
+    except sqlite3.Error:
+        current_app.logger.exception("Could not load refund details for order %s", order_id)
+        return jsonify({"success": False, "message": "Unable to load refund details."}), 500
+    finally:
+        conn.close()
+
+
 # ==========================================================
 # KITCHEN ORDERS
 # ==========================================================
@@ -1861,13 +2084,13 @@ def receipt(order_id):
 def create_kot():
 
     conn = None
+    error_id = secrets.token_hex(4)
 
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
 
-        print("🔥 KOT DATA:", data)
 
-        if not data:
+        if not isinstance(data, dict):
             return jsonify({
                 "success": False,
                 "message": "No order data received"
@@ -1875,9 +2098,8 @@ def create_kot():
 
         items = data.get("items", [])
 
-        print("🔥 KOT ITEMS:", items)
 
-        if not items:
+        if not isinstance(items, list) or not items:
             return jsonify({
                 "success": False,
                 "message": "No items in order"
@@ -1892,19 +2114,42 @@ def create_kot():
         if table_id in ("", None):
             table_id = None
         else:
-            table_id = int(table_id)
+            try:
+                table_id = int(table_id)
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "message": "Choose a valid table."}), 400
+            if table_id <= 0:
+                return jsonify({"success": False, "message": "Choose a valid table."}), 400
 
         order_type = data.get("order_type", "Dine In")
+        if not isinstance(order_type, str) or order_type not in {"Dine In", "Parcel", "Delivery", "Take Away"}:
+            return jsonify({"success": False, "message": "Choose a valid order type."}), 400
+        order_source = data.get("order_source", "Cafe")
+        if not isinstance(order_source, str) or order_source not in {"Cafe", "Swiggy", "Zomato"}:
+            return jsonify({"success": False, "message": "Choose a valid order source."}), 400
+        if order_source in {"Swiggy", "Zomato"} and order_type != "Delivery":
+            return jsonify({"success": False, "message": "Swiggy and Zomato orders must use Delivery order type."}), 400
+        kot_status = "Pending" if order_type == "Delivery" and order_source in {"Swiggy", "Zomato"} else "Completed"
 
-        subtotal = float(data.get("subtotal", 0))
-        gst = float(data.get("gst", 0))
-        discount = float(data.get("discount", 0))
-        total = float(data.get("total", 0))
+        try:
+            subtotal = float(data.get("subtotal", 0))
+            gst = float(data.get("gst", 0))
+            discount = float(data.get("discount", 0))
+            total = float(data.get("total", 0))
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "message": "Bill totals must be valid amounts."}), 400
+        if not all(math.isfinite(value) for value in (subtotal, gst, discount, total)) or min(subtotal, gst, discount, total) < 0:
+            return jsonify({"success": False, "message": "Bill totals must be valid non-negative amounts."}), 400
 
         payment_method = data.get(
             "payment_method",
             "Pending"
         )
+        if not isinstance(payment_method, str) or payment_method not in {"Pending", "Cash", "Card", "Other", "UPI", "Wallet", "Paytm EDC"}:
+            return jsonify({"success": False, "message": "Choose a valid payment method."}), 400
+        customer_name = data.get("customer_name", "")
+        if customer_name is not None and not isinstance(customer_name, str):
+            return jsonify({"success": False, "message": "Customer name or phone must be text."}), 400
 
         # ==============================
         # DATABASE
@@ -1912,6 +2157,13 @@ def create_kot():
 
         conn = get_connection()
         cursor = conn.cursor()
+
+        if table_id is not None:
+            selected_table = cursor.execute("SELECT status FROM tables WHERE id=?", (table_id,)).fetchone()
+            if not selected_table:
+                return jsonify({"success": False, "message": "The selected table no longer exists."}), 409
+            if selected_table[0] not in ("Available", "Occupied"):
+                return jsonify({"success": False, "message": "The selected table is not available for a new order."}), 409
 
         selected_customer_id = data.get("customer_id")
         if selected_customer_id not in (None, ""):
@@ -1925,22 +2177,31 @@ def create_kot():
                 return jsonify({"success": False, "message": "Selected customer no longer exists."}), 409
             customer_id = selected_customer_id
         else:
-            customer_id = get_or_create_customer(cursor, data.get("customer_name", ""))
+            customer_id = get_or_create_customer(cursor, customer_name)
+
+        ingredient_demand = {}
+        for cart_item in items:
+            try:
+                recipe_product_id = int(cart_item.get("product_id"))
+                recipe_quantity = int(cart_item.get("quantity", 1))
+            except (TypeError, ValueError, AttributeError):
+                conn.rollback()
+                return jsonify({"success": False, "message": "An order item has invalid details."}), 400
+            for recipe in cursor.execute("SELECT ingredient_id, quantity FROM recipes WHERE product_id=?", (recipe_product_id,)).fetchall():
+                ingredient_demand[recipe[0]] = ingredient_demand.get(recipe[0], 0) + float(recipe[1]) * recipe_quantity
+        for ingredient_id, required_quantity in ingredient_demand.items():
+            available = cursor.execute("SELECT name, current_stock FROM ingredients WHERE id=? AND active=1", (ingredient_id,)).fetchone()
+            if not available or float(available["current_stock"]) + 1e-9 < required_quantity:
+                conn.rollback()
+                label = available["name"] if available else "recipe ingredient"
+                return jsonify({"success": False, "message": f"Insufficient ingredient stock: {label}."}), 409
 
         # ==============================
         # BILL NUMBER
         # ==============================
 
-        cursor.execute("""
-            SELECT COUNT(*) + 1
-            FROM orders
-        """)
+        bill_no = "KOT-" + datetime.now().strftime("%Y%m%d%H%M%S%f")
 
-        count = cursor.fetchone()[0]
-
-        bill_no = f"KOT-{count:05d}"
-
-        print("🔥 BILL NO:", bill_no)
 
         # ==============================
         # CREATE ORDER
@@ -1952,6 +2213,7 @@ def create_kot():
                 table_id,
                 customer_id,
                 order_type,
+                order_source,
                 subtotal,
                 gst,
                 discount,
@@ -1960,24 +2222,24 @@ def create_kot():
                 payment_status,
                 status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             bill_no,
             table_id,
             customer_id,
             order_type,
+            order_source,
             subtotal,
             gst,
             discount,
             total,
             payment_method,
             "Pending",
-            "Pending"
+            kot_status
         ))
 
         order_id = cursor.lastrowid
 
-        print("🔥 ORDER CREATED:", order_id)
 
         # ==============================
         # CREATE ORDER ITEMS
@@ -1987,20 +2249,24 @@ def create_kot():
 
         for item in items:
 
-            print("🔥 PROCESSING ITEM:", item)
 
-            product_id = int(item["product_id"])
+            if not isinstance(item, dict):
+                conn.rollback()
+                return jsonify({"success": False, "message": "An order item is invalid."}), 400
+            try:
+                product_id = int(item["product_id"])
+                quantity = int(item.get("quantity", 1))
+                price = float(item.get("price", 0))
+            except (KeyError, TypeError, ValueError):
+                conn.rollback()
+                return jsonify({"success": False, "message": "An order item has invalid details."}), 400
+            if product_id <= 0 or not math.isfinite(price) or price < 0:
+                conn.rollback()
+                return jsonify({"success": False, "message": "An order item has invalid details."}), 400
 
-            quantity = int(
-                item.get("quantity", 1)
-            )
             if quantity <= 0:
                 conn.rollback()
                 return jsonify({"success": False, "message": "Item quantity must be at least one."}), 400
-
-            price = float(
-                item.get("price", 0)
-            )
 
             product = conn.execute(
                 "SELECT stock, is_available, price FROM products WHERE id=?",
@@ -2012,7 +2278,7 @@ def create_kot():
             if not product["is_available"]:
                 conn.rollback()
                 return jsonify({"success": False, "message": "One of the selected items is no longer available."}), 409
-            if product["stock"] < quantity:
+            if int(product["stock"] or 0) < quantity:
                 conn.rollback()
                 return jsonify({"success": False, "message": "Insufficient stock for a selected item."}), 409
 
@@ -2052,6 +2318,14 @@ def create_kot():
                 VALUES (?, ?, 'SALE', ?)
             """, (product_id, quantity, f"Kitchen ticket {bill_no}"))
 
+            for recipe in cursor.execute("SELECT ingredient_id, quantity FROM recipes WHERE product_id=?", (product_id,)).fetchall():
+                used = float(recipe["quantity"]) * quantity
+                cursor.execute("UPDATE ingredients SET current_stock=current_stock-? WHERE id=?", (used, recipe["ingredient_id"]))
+                cursor.execute("""
+                    INSERT INTO ingredient_movements(ingredient_id,quantity_change,movement_type,reference,order_id,actor)
+                    VALUES(?,?,'SALE',?,?,?)
+                """, (recipe["ingredient_id"], -used, bill_no, order_id, session.get("username", "")))
+
         # ==============================
         # SAVE
         # ==============================
@@ -2068,13 +2342,10 @@ def create_kot():
         if table_id:
             cursor.execute("UPDATE tables SET status='Occupied' WHERE id=?", (table_id,))
 
-        conn.commit()
+        cursor.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
+                       (session.get("username", ""), "kitchen_order_created", "order", str(order_id), json.dumps({"bill_no": bill_no, "total": total})))
 
-        print(
-            "🔥🔥 KOT CREATED SUCCESSFULLY:",
-            order_id,
-            bill_no
-        )
+        conn.commit()
 
         return jsonify({
             "success": True,
@@ -2085,19 +2356,17 @@ def create_kot():
             }
         }), 200
 
-    except Exception as e:
+    except Exception:
 
         if conn:
             conn.rollback()
 
-        print("\n🔥🔥🔥 KOT ERROR 🔥🔥🔥")
-        print("ERROR TYPE:", type(e).__name__)
-        print("ERROR:", str(e))
-        print("🔥🔥🔥 END KOT ERROR 🔥🔥🔥\n")
+        current_app.logger.exception("Kitchen ticket creation failed (reference %s)", error_id)
 
         return jsonify({
             "success": False,
-            "message": str(e)
+            "message": "Kitchen ticket could not be saved. Share the error reference with support if it happens again.",
+            "error_id": error_id
         }), 500
 
     finally:
@@ -2105,7 +2374,7 @@ def create_kot():
         if conn:
             conn.close()
 
-print("🔥🔥 CREATE KOT ROUTE DEFINED 🔥🔥")
+print(" CREATE KOT ROUTE DEFINED ")
 
 # ==========================================================
 # UPDATE ORDER STATUS
@@ -2115,51 +2384,32 @@ print("🔥🔥 CREATE KOT ROUTE DEFINED 🔥🔥")
 def update_status(order_id):
 
     try:
-
-        status = request.get_json().get("status")
-
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "message": "Order status is invalid."}), 400
+        status = data.get("status")
+        allowed = {"Pending", "Hold", "Preparing", "Ready", "Served", "Completed"}
+        if status not in allowed:
+            return jsonify({"success": False, "message": "Choose a valid order status."}), 400
         conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            order = cursor.execute("SELECT status FROM orders WHERE id=?", (order_id,)).fetchone()
+            if not order:
+                return jsonify({"success": False, "message": "Order not found."}), 404
+            if order[0] in ("Cancelled", "Refunded"):
+                return jsonify({"success": False, "message": "This order is already closed."}), 409
+            cursor.execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
+            cursor.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
+                           (session.get("username", ""), "order_status_changed", "order", str(order_id), json.dumps({"status": status})))
+            conn.commit()
+            return jsonify({"success": True, "message": "Status updated."})
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        current_app.logger.exception("Could not update order status for %s", order_id)
+        return jsonify({"success": False, "message": "Unable to update order status."}), 500
 
-        cursor = conn.cursor()
-
-        cursor.execute("""
-
-            UPDATE orders
-
-            SET status = ?
-
-            WHERE id = ?
-
-        """, (
-
-            status,
-
-            order_id
-
-        ))
-
-        conn.commit()
-
-        conn.close()
-
-        return jsonify({
-
-            "success": True,
-
-            "message": "Status Updated"
-
-        })
-
-    except Exception as e:
-
-        return jsonify({
-
-            "success": False,
-
-            "message": str(e)
-
-        }), 500
-
-print("🔥🔥 BILLING.PY LOADED 🔥🔥")
+print(" BILLING.PY LOADED ")
 
 

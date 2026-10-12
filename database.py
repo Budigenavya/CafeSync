@@ -1,5 +1,7 @@
 import os
 import sqlite3
+import shutil
+from werkzeug.security import generate_password_hash
 
 from config import DATABASE
 
@@ -14,11 +16,19 @@ def get_connection():
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
 
+    # If a persistent mount is configured for the first time, preserve the
+    # existing app-local database by seeding the mount once. Never overwrite
+    # a database already on the persistent disk.
+    legacy_database = os.path.join(os.path.dirname(__file__), "database.db")
+    if not os.path.exists(DATABASE) and os.path.abspath(DATABASE) != os.path.abspath(legacy_database) and os.path.exists(legacy_database):
+        shutil.copy2(legacy_database, DATABASE)
+
     print("Database:", os.path.abspath(DATABASE))
 
     conn = sqlite3.connect(DATABASE)
 
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
 
     return conn
 
@@ -57,7 +67,14 @@ def create_tables():
 
         """)
 
-        print("✓ Users Table Created")
+        print("[OK] Users Table Created")
+
+        user_columns = {row[1] for row in cursor.execute("PRAGMA table_info(users)").fetchall()}
+        if "created_at" not in user_columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN created_at TEXT")
+            cursor.execute("UPDATE users SET created_at=CURRENT_TIMESTAMP WHERE created_at IS NULL")
+        if "is_active" not in user_columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
 
         # ==========================================================
         # CATEGORIES
@@ -75,7 +92,7 @@ def create_tables():
 
         """)
 
-        print("✓ Categories Table Created")
+        print("[OK] Categories Table Created")
 
         # ==========================================================
         # PRODUCTS
@@ -111,7 +128,7 @@ def create_tables():
 
         """)
 
-        print("✓ Products Table Created")
+        print("[OK] Products Table Created")
 
         product_columns = {
             row[1]
@@ -119,6 +136,8 @@ def create_tables():
         }
         if "is_available" not in product_columns:
             cursor.execute("ALTER TABLE products ADD COLUMN is_available INTEGER NOT NULL DEFAULT 1")
+        if "image" not in product_columns:
+            cursor.execute("ALTER TABLE products ADD COLUMN image TEXT")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS product_addons(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,6 +147,82 @@ def create_tables():
                 is_available INTEGER NOT NULL DEFAULT 1,
                 FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
             )
+        """)
+        cursor.executescript("""
+            CREATE TABLE IF NOT EXISTS ingredients(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                unit TEXT NOT NULL DEFAULT 'g',
+                current_stock REAL NOT NULL DEFAULT 0 CHECK(current_stock >= 0),
+                low_stock_threshold REAL NOT NULL DEFAULT 0 CHECK(low_stock_threshold >= 0),
+                unit_cost REAL NOT NULL DEFAULT 0 CHECK(unit_cost >= 0),
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS recipes(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL,
+                ingredient_id INTEGER NOT NULL,
+                quantity REAL NOT NULL CHECK(quantity > 0),
+                UNIQUE(product_id, ingredient_id),
+                FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY(ingredient_id) REFERENCES ingredients(id)
+            );
+            CREATE TABLE IF NOT EXISTS ingredient_movements(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ingredient_id INTEGER NOT NULL,
+                quantity_change REAL NOT NULL,
+                movement_type TEXT NOT NULL,
+                reference TEXT DEFAULT '',
+                order_id INTEGER,
+                notes TEXT DEFAULT '',
+                actor TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(ingredient_id) REFERENCES ingredients(id),
+                FOREIGN KEY(order_id) REFERENCES orders(id)
+            );
+            CREATE TABLE IF NOT EXISTS suppliers(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                phone TEXT DEFAULT '', email TEXT DEFAULT '', notes TEXT DEFAULT '',
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS stock_receipts(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                supplier_id INTEGER,
+                reference TEXT DEFAULT '',
+                total_cost REAL NOT NULL DEFAULT 0,
+                received_by TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(supplier_id) REFERENCES suppliers(id)
+            );
+            CREATE TABLE IF NOT EXISTS stock_receipt_items(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                receipt_id INTEGER NOT NULL,
+                ingredient_id INTEGER NOT NULL,
+                quantity REAL NOT NULL CHECK(quantity > 0),
+                unit_cost REAL NOT NULL DEFAULT 0,
+                FOREIGN KEY(receipt_id) REFERENCES stock_receipts(id) ON DELETE CASCADE,
+                FOREIGN KEY(ingredient_id) REFERENCES ingredients(id)
+            );
+            CREATE TABLE IF NOT EXISTS audit_log(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor TEXT DEFAULT '', action TEXT NOT NULL,
+                entity_type TEXT NOT NULL, entity_id TEXT DEFAULT '',
+                details TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS day_closings(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                business_date TEXT NOT NULL UNIQUE,
+                closed_by TEXT DEFAULT '',
+                order_count INTEGER NOT NULL DEFAULT 0,
+                gross_sales REAL NOT NULL DEFAULT 0,
+                refunds REAL NOT NULL DEFAULT 0,
+                payment_summary TEXT NOT NULL DEFAULT '{}',
+                closed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         # ==========================================================
         # CUSTOMERS
@@ -155,7 +250,7 @@ def create_tables():
 
         """)
 
-        print("✓ Customers Table Created")
+        print("[OK] Customers Table Created")
 
         # ==========================================================
         # TABLES
@@ -175,7 +270,7 @@ def create_tables():
 
         """)
 
-        print("✓ Tables Table Created")
+        print("[OK] Tables Table Created")
         table_columns = {row[1] for row in cursor.execute("PRAGMA table_info(tables)").fetchall()}
         if "capacity" not in table_columns:
             cursor.execute("ALTER TABLE tables ADD COLUMN capacity INTEGER NOT NULL DEFAULT 4")
@@ -206,6 +301,7 @@ def create_tables():
             customer_id INTEGER,
 
             order_type TEXT,
+            order_source TEXT DEFAULT 'Cafe',
 
             subtotal REAL DEFAULT 0,
 
@@ -231,7 +327,7 @@ def create_tables():
 
         """)
 
-        print("✓ Orders Table Created")
+        print("[OK] Orders Table Created")
 
         order_columns = {
             row[1]
@@ -254,10 +350,18 @@ def create_tables():
             "refunded_at": "TIMESTAMP",
             "served_at": "TIMESTAMP",
             "split_details": "TEXT",
+            "order_source": "TEXT DEFAULT 'Cafe'",
         }.items():
             if column not in order_columns:
                 cursor.execute(f"ALTER TABLE orders ADD COLUMN {column} {definition}")
                 order_columns.add(column)
+        cursor.execute("""
+            UPDATE orders
+            SET status='Completed'
+            WHERE COALESCE(order_source, 'Cafe')='Cafe'
+              AND order_type IN ('Parcel', 'Take Away', 'Dine In')
+              AND status IN ('Pending', 'Preparing', 'Ready', 'Served')
+        """)
 
         # ==========================================================
         # ORDER ITEMS
@@ -288,7 +392,7 @@ def create_tables():
 
         """)
 
-        print("✓ Order Items Table Created")
+        print("[OK] Order Items Table Created")
         item_columns = {
             row[1]
             for row in cursor.execute("PRAGMA table_info(order_items)").fetchall()
@@ -325,7 +429,7 @@ def create_tables():
 
         """)
 
-        print("✓ Employees Table Created")
+        print("[OK] Employees Table Created")
 
         # ==========================================================
         # SETTINGS
@@ -365,11 +469,30 @@ def create_tables():
             "maximum_discount": "REAL NOT NULL DEFAULT 30",
             "allow_manual_discount": "INTEGER NOT NULL DEFAULT 0",
             "show_gst_on_receipt": "INTEGER NOT NULL DEFAULT 1",
+            "owner_name": "TEXT DEFAULT ''",
+            "website": "TEXT DEFAULT ''",
+            "working_days": "TEXT DEFAULT ''",
+            "facebook": "TEXT DEFAULT ''",
+            "instagram": "TEXT DEFAULT ''",
+            "twitter": "TEXT DEFAULT ''",
+            "whatsapp": "TEXT DEFAULT ''",
+            "theme": "TEXT NOT NULL DEFAULT 'light'",
+            "currency_symbol": "TEXT NOT NULL DEFAULT '₹'",
+            "opening_time": "TEXT DEFAULT '09:00'",
+            "closing_time": "TEXT DEFAULT '22:00'",
+            "receipt_header": "TEXT DEFAULT ''",
+            "receipt_footer": "TEXT DEFAULT ''",
+            "dashboard_refresh": "INTEGER NOT NULL DEFAULT 30",
+            "dashboard_chart_days": "INTEGER NOT NULL DEFAULT 7",
+            "low_stock_alert": "INTEGER NOT NULL DEFAULT 1",
+            "order_notification": "INTEGER NOT NULL DEFAULT 1",
+            "default_payment_method": "TEXT NOT NULL DEFAULT 'Cash'",
+            "default_order_type": "TEXT NOT NULL DEFAULT 'Take Away'",
         }.items():
             if column not in settings_columns:
                 cursor.execute(f"ALTER TABLE settings ADD COLUMN {column} {definition}")
 
-        print("✓ Settings Table Created")
+        print("[OK] Settings Table Created")
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS held_orders (
@@ -415,7 +538,32 @@ def create_tables():
 
         """)
 
-        print("✓ Inventory Logs Table Created")
+        # Older deployments created inventory_logs from models.py with legacy
+        # operation/quantity_changed columns, while billing writes action and
+        # quantity. Keep both schema generations compatible at startup.
+        inventory_log_columns = {
+            row[1] for row in cursor.execute("PRAGMA table_info(inventory_logs)").fetchall()
+        }
+        for column, definition in {
+            "previous_stock": "INTEGER",
+            "new_stock": "INTEGER",
+            "quantity_changed": "INTEGER",
+            "operation": "TEXT",
+            "quantity": "INTEGER",
+            "action": "TEXT",
+            "remarks": "TEXT",
+            "created_at": "TIMESTAMP",
+        }.items():
+            if column not in inventory_log_columns:
+                cursor.execute(f"ALTER TABLE inventory_logs ADD COLUMN {column} {definition}")
+                inventory_log_columns.add(column)
+        cursor.execute("UPDATE inventory_logs SET action=operation WHERE action IS NULL AND operation IS NOT NULL")
+        cursor.execute("UPDATE inventory_logs SET operation=action WHERE operation IS NULL AND action IS NOT NULL")
+        cursor.execute("UPDATE inventory_logs SET quantity=quantity_changed WHERE quantity IS NULL AND quantity_changed IS NOT NULL")
+        cursor.execute("UPDATE inventory_logs SET quantity_changed=quantity WHERE quantity_changed IS NULL AND quantity IS NOT NULL")
+        cursor.execute("UPDATE inventory_logs SET created_at=CURRENT_TIMESTAMP WHERE created_at IS NULL")
+
+        print("[OK] Inventory Logs Table Created")
 
         # ==========================================================
         # PAYMENTS
@@ -448,7 +596,7 @@ def create_tables():
         if "split_person" not in payment_columns:
             cursor.execute("ALTER TABLE payments ADD COLUMN split_person TEXT")
 
-        print("✓ Payments Table Created")
+        print("[OK] Payments Table Created")
 
         # ==========================================================
         # EXPENSES
@@ -474,7 +622,7 @@ def create_tables():
 
         """)
 
-        print("✓ Expenses Table Created")
+        print("[OK] Expenses Table Created")
         # ==========================================================
         # DEFAULT ADMIN
         # ==========================================================
@@ -497,21 +645,11 @@ def create_tables():
 
             )
 
-            VALUES(
+            VALUES(?, ?, ?, 'Admin')
 
-                'Administrator',
+            """, ("Administrator", "admin", generate_password_hash(os.environ.get("CAFESYNC_ADMIN_PASSWORD", "admin123"))))
 
-                'admin',
-
-                'admin123',
-
-                'Admin'
-
-            )
-
-            """)
-
-            print("✓ Default Admin Created")
+            print("[OK] Default Admin Created")
 
         # ==========================================================
         # DEFAULT SETTINGS
@@ -565,7 +703,7 @@ def create_tables():
 
             """)
 
-            print("✓ Default Settings Added")
+            print("[OK] Default Settings Added")
 
         # ==========================================================
         # DEFAULT CATEGORIES
@@ -607,7 +745,7 @@ def create_tables():
 
             )
 
-            print("✓ Default Categories Added")
+            print("[OK] Default Categories Added")
 
         # ==========================================================
         # DEFAULT TABLES
@@ -649,7 +787,7 @@ def create_tables():
 
                 )
 
-            print("✓ Cafe Tables Added")
+            print("[OK] Cafe Tables Added")
 
         # ==========================================================
         # SAMPLE PRODUCTS
@@ -713,7 +851,7 @@ def create_tables():
 
             )
 
-            print("✓ Sample Products Added")
+            print("[OK] Sample Products Added")
         # ==========================================================
         # COMMIT CHANGES
         # ==========================================================
@@ -721,7 +859,7 @@ def create_tables():
         conn.commit()
 
         print("=" * 50)
-        print("✓ CafeSync Database Created Successfully")
+        print("[OK] CafeSync Database Created Successfully")
         print("=" * 50)
 
     except Exception as e:

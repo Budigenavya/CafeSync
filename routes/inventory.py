@@ -15,6 +15,8 @@ import os
 import uuid
 import json
 import math
+import csv
+import io
 from werkzeug.utils import secure_filename
 from config import PRODUCT_IMAGE_FOLDER
 
@@ -64,6 +66,15 @@ def _remove_product_image(filename):
         os.remove(os.path.join(PRODUCT_IMAGE_FOLDER, safe_name))
     except (FileNotFoundError, OSError):
         pass
+
+
+def _product_payload():
+    # FormData is used by the inventory editor even when the user does not
+    # select a photo. An empty request.files collection must not switch this
+    # multipart request over to JSON parsing.
+    if request.mimetype in {"multipart/form-data", "application/x-www-form-urlencoded"}:
+        return request.form
+    return request.get_json(silent=True) or {}
 
 
 @inventory_bp.route("/inventory/product-images/<path:filename>")
@@ -516,7 +527,7 @@ def add_product():
 
     try:
 
-        data = request.form if request.files else (request.get_json(silent=True) or {})
+        data = _product_payload()
 
         name = data.get("name", "").strip()
         category_id = data.get("category_id")
@@ -653,7 +664,7 @@ def update_product(product_id):
 
     try:
 
-        data = request.form if request.files else (request.get_json(silent=True) or {})
+        data = _product_payload()
 
         name = data.get("name", "").strip()
         category_id = data.get("category_id")
@@ -669,6 +680,10 @@ def update_product(product_id):
             return error("Enter a valid non-negative price and whole-number stock.")
         category_id = category_id or None
         image_filename = _save_product_image(request.files.get("image"))
+
+        if not name:
+            _remove_product_image(image_filename)
+            return error("Product name is required.")
 
         conn = get_connection()
 
@@ -1554,6 +1569,89 @@ def import_menu():
         "success": False,
         "message": "Legacy menu import is disabled because it could overwrite your current catalog. Manage products from Inventory."
     }), 410
+
+
+@inventory_bp.route("/inventory/import-products", methods=["POST"])
+@login_required
+def import_missing_products():
+    """Merge missing products from a CSV without changing existing stock or orders."""
+    upload = request.files.get("file")
+    if not upload or not upload.filename or not upload.filename.lower().endswith(".csv"):
+        return error("Choose a product CSV file.", 400)
+
+    conn = None
+    try:
+        raw = upload.read(2 * 1024 * 1024 + 1)
+        if len(raw) > 2 * 1024 * 1024:
+            return error("Product CSV must be smaller than 2 MB.", 400)
+        reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig")))
+        fields = {str(field or "").strip().lower() for field in (reader.fieldnames or [])}
+        if not {"name", "price", "stock"}.issubset(fields):
+            return error("CSV needs name, price, and stock columns.", 400)
+        rows = list(reader)
+        if not rows or len(rows) > 1000:
+            return error("CSV must contain between 1 and 1,000 products.", 400)
+
+        conn = get_connection()
+        cursor = conn.cursor()
+        imported = skipped = 0
+        issues = []
+        for line_number, row in enumerate(rows, start=2):
+            values = {str(key or "").strip().lower(): value for key, value in row.items()}
+            name = str(values.get("name") or "").strip()[:100]
+            if not name:
+                skipped += 1
+                issues.append(f"Row {line_number}: missing product name")
+                continue
+            # Existing records are left intact, especially their live stock.
+            if cursor.execute("SELECT 1 FROM products WHERE LOWER(TRIM(name))=LOWER(?)", (name,)).fetchone():
+                skipped += 1
+                continue
+            try:
+                price = float(values.get("price") or 0)
+                stock = int(values.get("stock") or 0)
+                is_available = int(str(values.get("is_available", "1")).strip().lower() not in {"0", "false", "no", "off"})
+                if not math.isfinite(price) or price < 0 or stock < 0:
+                    raise ValueError
+            except (TypeError, ValueError, OverflowError):
+                skipped += 1
+                issues.append(f"Row {line_number}: invalid price or whole-number stock")
+                continue
+
+            category_name = str(values.get("category") or "").strip()[:80]
+            category_id = None
+            if category_name:
+                category = cursor.execute("SELECT id FROM categories WHERE LOWER(name)=LOWER(?)", (category_name,)).fetchone()
+                if category:
+                    category_id = category[0]
+                else:
+                    cursor.execute("INSERT INTO categories(name) VALUES(?)", (category_name,))
+                    category_id = cursor.lastrowid
+            barcode = str(values.get("barcode") or "").strip() or None
+            if barcode and cursor.execute("SELECT 1 FROM products WHERE barcode=?", (barcode,)).fetchone():
+                skipped += 1
+                issues.append(f"Row {line_number}: barcode already belongs to another product")
+                continue
+            cursor.execute("""
+                INSERT INTO products(category_id,name,price,stock,barcode,is_available)
+                VALUES(?,?,?,?,?,?)
+            """, (category_id, name, price, stock, barcode, is_available))
+            imported += 1
+
+        cursor.execute("""
+            INSERT INTO audit_log(actor,action,entity_type,entity_id,details)
+            VALUES(?,?,?,?,?)
+        """, (session.get("username", ""), "products_imported", "catalog", "", json.dumps({"imported": imported, "skipped": skipped})))
+        conn.commit()
+        return jsonify({"success": True, "message": f"Imported {imported} missing products; skipped {skipped} existing or invalid rows.", "imported": imported, "skipped": skipped, "issues": issues[:30]})
+    except (UnicodeDecodeError, csv.Error, sqlite3.Error, OSError):
+        if conn:
+            conn.rollback()
+        current_app.logger.exception("Product catalog import failed")
+        return error("Could not import this CSV. No partial catalog changes were saved.", 400)
+    finally:
+        if conn:
+            conn.close()
 
 # ==========================================================
 # END OF FILE

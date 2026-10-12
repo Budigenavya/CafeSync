@@ -141,6 +141,31 @@ async function initialize(){
 
 }
 
+document.getElementById("importProductsBtn")?.addEventListener("click", () => {
+    document.getElementById("importProductsFile")?.click();
+});
+
+document.getElementById("importProductsFile")?.addEventListener("change", async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    try {
+        const response = await fetch(`${API}/inventory/import-products`, {
+            method: "POST", body: form, credentials: "same-origin"
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not import products.");
+        showToast(result.message);
+        if (result.issues?.length) console.warn("Catalog import details:", result.issues);
+        await refreshInventory();
+    } catch (error) {
+        showToast(error.message || "Could not import products.", "error");
+    } finally {
+        event.target.value = "";
+    }
+});
+
 /* ==========================================================
                     DASHBOARD
 ========================================================== */
@@ -170,6 +195,9 @@ async function loadDashboard(){
             .textContent =
 
             result.data.total_products;
+
+            const unpriced = document.getElementById("unpricedProducts");
+            if (unpriced) unpriced.textContent = result.data.unpriced_products ? `${result.data.unpriced_products} need prices` : "All prices set";
 
             document
 
@@ -410,7 +438,7 @@ function renderProducts(data){
 
         <tr>
 
-            <td colspan="7">
+            <td colspan="8">
 
                 <div class="empty-state">
 
@@ -464,6 +492,8 @@ function renderProducts(data){
 
         <tr>
 
+            <td>${product.image_url ? `<img class="product-thumb" src="${product.image_url}" alt="" loading="lazy">` : `<span class="product-thumb-placeholder"><i class="fa-solid fa-image"></i></span>`}</td>
+
             <td>${product.barcode||"-"}</td>
 
             <td>
@@ -484,7 +514,7 @@ function renderProducts(data){
 
             <td>
 
-                ₹${Number(product.price).toFixed(2)}
+                ${product.price === null || String(product.price).trim() === "" ? `<span class="status out">Price required</span>` : `₹${Number(product.price).toFixed(2)}`}
 
             </td>
 
@@ -688,6 +718,8 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("productForm").reset();
 
             document.getElementById("productId").value = "";
+            document.getElementById("productImagePreview").hidden = true;
+            document.getElementById("productImagePreview").removeAttribute("src");
 
             productModal.classList.add("active");
 
@@ -695,6 +727,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     }
 
+});
+
+document.getElementById("productImage").addEventListener("change", event => {
+    const preview = document.getElementById("productImagePreview");
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+        event.target.value = "";
+        showToast("Product photos must be smaller than 5 MB.", "error");
+        return;
+    }
+    preview.src = URL.createObjectURL(file);
+    preview.hidden = false;
 });
 /* ==========================================================
                     CLOSE PRODUCT MODAL
@@ -727,24 +772,14 @@ async function(e){
     .getElementById("productId")
     .value;
 
-    const product = {
-
-        name:
-        document.getElementById("productName").value,
-
-        category_id:
-        document.getElementById("productCategory").value,
-
-        barcode:
-        document.getElementById("barcode").value,
-
-        price:
-        document.getElementById("price").value,
-
-        stock:
-        document.getElementById("stock").value
-
-    };
+    const product = new FormData();
+    product.append("name", document.getElementById("productName").value);
+    product.append("category_id", document.getElementById("productCategory").value);
+    product.append("barcode", document.getElementById("barcode").value);
+    product.append("price", document.getElementById("price").value);
+    product.append("stock", document.getElementById("stock").value);
+    const photo = document.getElementById("productImage").files[0];
+    if (photo) product.append("image", photo);
 
     let url =
     API + "/inventory/products";
@@ -770,15 +805,7 @@ async function(e){
 
                 method,
 
-                headers:{
-
-                    "Content-Type":
-                    "application/json"
-
-                },
-
-                body:
-                JSON.stringify(product)
+                body: product
 
             }
 
@@ -864,6 +891,11 @@ function editProduct(id){
     document
     .getElementById("stock")
     .value = product.stock;
+
+    const preview = document.getElementById("productImagePreview");
+    document.getElementById("productImage").value = "";
+    preview.src = product.image_url || "";
+    preview.hidden = !product.image_url;
 
     productModal.classList.add("active");
 

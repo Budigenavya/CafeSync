@@ -38,7 +38,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
         <i class="fa-solid fa-utensils"></i>
 
-        <div><h2>CafeSync Kitchen</h2><small>LIVE PREPARATION BOARD</small></div>
+        <div><h2>CafeSync Kitchen</h2><small>DELIVERY QUEUE & COMPLETED TAKEAWAYS</small></div>
 
     </div>
 
@@ -76,7 +76,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
         <h2 id="pendingCount">0</h2>
 
-        <p>Pending</p>
+        <p>Delivery Pending</p>
 
     </div>
 
@@ -84,7 +84,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
         <h2 id="preparingCount">0</h2>
 
-        <p>Preparing</p>
+        <p>Delivery Preparing</p>
 
     </div>
 
@@ -92,15 +92,15 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
         <h2 id="readyCount">0</h2>
 
-        <p>Ready</p>
+        <p>Delivery Ready</p>
 
     </div>
 
-    <div class="summary-card served">
+    <div class="summary-card completed-takeaway-summary">
 
-        <h2 id="servedCount">0</h2>
+        <h2 id="completedTakeawayCount">0</h2>
 
-        <p>Served Today</p>
+        <p>Completed Takeaway Today</p>
 
     </div>
 
@@ -136,7 +136,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
             <i class="fa-solid fa-hourglass-half"></i>
 
-            Pending <span class="lane-count" id="pendingLaneCount">0</span>
+            Delivery · Pending <span class="lane-count" id="pendingLaneCount">0</span>
 
         </div>
 
@@ -158,7 +158,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
             <i class="fa-solid fa-fire-burner"></i>
 
-            Preparing <span class="lane-count" id="preparingLaneCount">0</span>
+            Delivery · Preparing <span class="lane-count" id="preparingLaneCount">0</span>
 
         </div>
 
@@ -180,7 +180,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
             <i class="fa-solid fa-circle-check"></i>
 
-            Ready <span class="lane-count" id="readyLaneCount">0</span>
+            Delivery · Ready <span class="lane-count" id="readyLaneCount">0</span>
 
         </div>
 
@@ -192,6 +192,14 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
         </div>
 
+    </section>
+
+    <section class="column completed-column">
+        <div class="column-header completed-header">
+            <i class="fa-solid fa-bag-shopping"></i>
+            Completed · Takeaway <span class="lane-count" id="completedTakeawayLaneCount">0</span>
+        </div>
+        <div id="completedTakeawayOrders" class="orders-container"></div>
     </section>
 
 </div>
@@ -220,6 +228,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
                     #1001
 
                 </span>
+                <span class="order-channel"></span>
 
             </div>
 
@@ -336,18 +345,6 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
                 <i class="fa-solid fa-circle-check"></i>
 
                 Ready
-
-            </button>
-
-            <button
-
-                class="btn-served"
-
-                onclick="serveOrder(1)">
-
-                <i class="fa-solid fa-utensils"></i>
-
-                Served
 
             </button>
 

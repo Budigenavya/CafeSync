@@ -10,7 +10,7 @@
 import sqlite3
 from datetime import datetime
 
-DATABASE = "database.db"
+from config import DATABASE
 
 
 # ==========================================================
@@ -20,6 +20,7 @@ DATABASE = "database.db"
 def get_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 

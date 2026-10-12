@@ -4,3 +4,6 @@
 .search-section{position:relative}
 
 .item-row{flex-wrap:wrap}.item-note-display{display:block;flex-basis:100%;font-size:9px;color:#9a6c2c;padding:1px 0 3px}
+.kitchen-board{grid-template-columns:repeat(4,minmax(220px,1fr))}.completed-header i{color:#348667}.order-channel{display:block;margin-top:4px;font-size:9px;font-weight:700;color:#65806f}.completed-takeaway-card{border-left-color:#348667!important}.completed-takeaway-card .order-channel{color:#348667}.completed-takeaway-card .order-actions[hidden]{display:none!important}
+.completed-column{border-color:#cfe4d7}.completed-header{color:#27684d}.completed-takeaway-card .order-time{background:#edf6f0;color:#557362}
+@media(min-width:901px) and (max-width:1180px){.kitchen-board{grid-template-columns:repeat(2,minmax(260px,1fr))}}

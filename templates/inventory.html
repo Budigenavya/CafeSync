@@ -158,6 +158,7 @@
         <h2 id="totalProducts">0</h2>
 
         <span>Total Products</span>
+        <small id="unpricedProducts" class="unpriced-count"></small>
 
     </div>
 
@@ -276,6 +277,12 @@
 
     </button>
 
+    <button id="importProductsBtn" type="button">
+        <i class="fa-solid fa-file-import"></i>
+        Import Missing Products
+    </button>
+    <input id="importProductsFile" type="file" accept=".csv,text/csv" hidden>
+
 </div>
 
 
@@ -290,6 +297,8 @@
 <thead>
 
 <tr>
+
+<th>Photo</th>
 
 <th>Barcode</th>
 
@@ -316,6 +325,60 @@
 </table>
 
 </div>
+
+<section class="stock-operations">
+    <div class="stock-ops-heading"><h2>Ingredient Stock & Recipes</h2><p>Track raw ingredients, receive purchases, record wastage, and deduct recipe quantities when a bill is saved.</p></div>
+    <div class="stock-ops-grid">
+        <form id="ingredientForm" class="stock-op-card">
+            <h3>Add ingredient</h3>
+            <label>Name<input name="name" required maxlength="100" placeholder="Espresso beans"></label>
+            <div class="stock-op-fields">
+                <label>Unit<input name="unit" required maxlength="20" value="g" placeholder="g, ml, pcs"></label>
+                <label>Opening stock<input name="current_stock" type="number" min="0" step="0.001" value="0" required></label>
+                <label>Low stock at<input name="low_stock_threshold" type="number" min="0" step="0.001" value="0" required></label>
+                <label>Cost per unit (₹)<input name="unit_cost" type="number" min="0" step="0.0001" value="0" required></label>
+            </div>
+            <button class="save-btn" type="submit">Add ingredient</button>
+        </form>
+        <form id="movementForm" class="stock-op-card">
+            <h3>Stock adjustment / wastage</h3>
+            <label>Ingredient<select id="movementIngredient" required></select></label>
+            <div class="stock-op-fields">
+                <label>Movement<select id="movementType"><option>Purchase</option><option>Waste</option><option>Adjustment</option></select></label>
+                <label>Quantity<input id="movementQuantity" type="number" min="0.001" step="0.001" required></label>
+            </div>
+            <label>Notes<input id="movementNotes" maxlength="250" placeholder="Optional note"></label>
+            <button class="save-btn" type="submit">Save movement</button>
+        </form>
+        <form id="receiptForm" class="stock-op-card">
+            <h3>Receive purchase</h3>
+            <label>Supplier (optional)<input id="receiptSupplier" maxlength="120" placeholder="Supplier name"></label>
+            <label>Ingredient<select id="receiptIngredient" required></select></label>
+            <div class="stock-op-fields">
+                <label>Quantity<input id="receiptQuantity" type="number" min="0.001" step="0.001" required></label>
+                <label>Cost per unit (₹)<input id="receiptCost" type="number" min="0" step="0.0001" required value="0"></label>
+            </div>
+            <label>Invoice / reference<input id="receiptReference" maxlength="80"></label>
+            <button class="save-btn" type="submit">Receive stock</button>
+        </form>
+        <form id="recipeForm" class="stock-op-card">
+            <h3>Menu item recipe</h3>
+            <label>Menu item<select id="recipeProduct" required></select></label>
+            <div class="stock-op-fields">
+                <label>Ingredient<select id="recipeIngredient"></select></label>
+                <label>Quantity per menu item<input id="recipeQuantity" type="number" min="0.001" step="0.001"></label>
+            </div>
+            <button id="addRecipeLine" type="button">Add ingredient</button>
+            <div id="recipeLines" class="recipe-lines"></div>
+            <p id="recipeCostEstimate" class="recipe-cost-estimate">Estimated ingredient cost: ₹0.00 per serving</p>
+            <button class="save-btn" type="submit">Save recipe</button>
+        </form>
+    </div>
+    <div class="table-container stock-table-wrap"><table><thead><tr><th>Ingredient</th><th>On hand</th><th>Low stock at</th><th>Cost / unit</th><th>Status</th></tr></thead><tbody id="ingredientTable"><tr><td colspan="5">Loading ingredients…</td></tr></tbody></table></div>
+    <h3 class="stock-history-title">Recent ingredient movements</h3>
+    <div class="table-container stock-table-wrap"><table><thead><tr><th>When</th><th>Ingredient</th><th>Movement</th><th>Quantity</th><th>Reference / Note</th><th>Staff</th></tr></thead><tbody id="ingredientMovementTable"><tr><td colspan="6">Loading stock history…</td></tr></tbody></table></div>
+</section>
+
 <!-- ==========================================================
                     ADD PRODUCT MODAL
 =========================================================== -->
@@ -347,6 +410,13 @@
                 id="productId">
 
             <div class="form-grid">
+
+                <div class="form-group product-photo-field">
+                    <label for="productImage">Product Photo</label>
+                    <input type="file" id="productImage" accept="image/jpeg,image/png,image/webp">
+                    <small>JPG, PNG, or WebP. Maximum 5 MB.</small>
+                    <img id="productImagePreview" class="product-thumb product-photo-preview" alt="Product photo preview" hidden>
+                </div>
 
                 <div class="form-group">
 
@@ -389,7 +459,8 @@
                         type="number"
                         id="price"
                         min="0"
-                        step="0.01">
+                        step="0.01"
+                        required>
 
                 </div>
 
@@ -670,6 +741,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="{{ url_for('static', filename='js/inventory.js') }}"></script>
+<script src="{{ url_for('static', filename='js/inventory-operations.js') }}"></script>
 
 </div>
 

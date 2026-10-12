@@ -64,9 +64,15 @@ def get_kitchen_orders():
                 o.id,
                 o.bill_no,
                 o.table_id,
-                COALESCE(t.table_name, o.order_type, 'Takeaway') AS table_name,
+                CASE
+                    WHEN o.order_type IN ('Parcel', 'Take Away') THEN 'Takeaway'
+                    WHEN COALESCE(o.order_source, 'Cafe') IN ('Swiggy', 'Zomato')
+                        THEN COALESCE(o.order_source, 'Delivery') || ' Delivery'
+                    ELSE COALESCE(t.table_name, o.order_type, 'Cafe Order')
+                END AS table_name,
                 COALESCE(c.name, 'Walk-in Customer') AS customer_name,
                 o.order_type,
+                COALESCE(o.order_source, 'Cafe') AS order_source,
                 o.subtotal,
                 o.gst,
                 o.discount,
@@ -80,10 +86,13 @@ def get_kitchen_orders():
             LEFT JOIN tables t ON t.id = o.table_id
             LEFT JOIN customers c ON c.id = o.customer_id
 
-            WHERE o.status IN (
-                'Pending',
-                'Preparing',
-                'Ready'
+            WHERE (
+                COALESCE(o.order_source, 'Cafe') IN ('Swiggy', 'Zomato')
+                AND o.status IN ('Pending', 'Preparing', 'Ready')
+            ) OR (
+                COALESCE(o.order_source, 'Cafe')='Cafe'
+                AND o.order_type IN ('Parcel', 'Take Away')
+                AND o.status='Completed'
             )
 
             ORDER BY o.created_at ASC
@@ -133,8 +142,10 @@ def get_kitchen_orders():
         served_today = conn.execute("""
             SELECT COUNT(*)
             FROM orders
-            WHERE status='Served'
-              AND DATE(served_at,'localtime')=DATE('now','localtime')
+            WHERE COALESCE(order_source, 'Cafe')='Cafe'
+              AND order_type IN ('Parcel', 'Take Away')
+              AND status='Completed'
+              AND DATE(created_at,'localtime')=DATE('now','localtime')
         """).fetchone()[0]
 
         conn.close()
@@ -143,12 +154,12 @@ def get_kitchen_orders():
             "success": True,
             "message": "Kitchen Orders Loaded",
             "data": orders,
-            "served_today": served_today
+            "completed_takeaway_today": served_today
         })
 
     except Exception as e:
 
-        print("🔥🔥🔥 KITCHEN ORDERS ERROR 🔥🔥🔥")
+        print(" KITCHEN ORDERS ERROR ")
         print(e)
 
         return jsonify({
@@ -169,15 +180,17 @@ def start_preparing(order_id):
 
     try:
 
-        print("🔥 START PREPARING:", order_id)
+        print(" START PREPARING:", order_id)
 
         conn = get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT status FROM orders WHERE id=?", (order_id,))
+        cursor.execute("SELECT status, COALESCE(order_source, 'Cafe') FROM orders WHERE id=?", (order_id,))
         current = cursor.fetchone()
         if not current:
             return jsonify({"success": False, "message": "Order not found"}), 404
+        if current[1] not in ("Swiggy", "Zomato"):
+            return jsonify({"success": False, "message": "Only Swiggy and Zomato delivery orders use kitchen preparation statuses."}), 409
         if current[0] != "Pending":
             return jsonify({"success": False, "message": "Only pending orders can be started"}), 409
 
@@ -196,7 +209,7 @@ def start_preparing(order_id):
         conn.commit()
 
         print(
-            "🔥 ORDER NOW PREPARING:",
+            " ORDER NOW PREPARING:",
             order_id
         )
 
@@ -214,10 +227,10 @@ def start_preparing(order_id):
         if conn:
             conn.rollback()
 
-        print("\n🔥🔥🔥 START PREPARING ERROR 🔥🔥🔥")
+        print("\n START PREPARING ERROR ")
         print(type(e).__name__)
         print(str(e))
-        print("🔥🔥🔥 END ERROR 🔥🔥🔥\n")
+        print(" END ERROR \n")
 
         return jsonify({
             "success": False,
@@ -239,14 +252,14 @@ def mark_ready(order_id):
     conn = None
 
     try:
-        print("🔥 MARK READY CALLED:", order_id)
+        print(" MARK READY CALLED:", order_id)
 
         conn = get_connection()
         cursor = conn.cursor()
 
         # Check order exists
         cursor.execute("""
-            SELECT id, status
+            SELECT id, status, COALESCE(order_source, 'Cafe')
             FROM orders
             WHERE id = ?
         """, (order_id,))
@@ -259,8 +272,11 @@ def mark_ready(order_id):
                 "message": "Order not found"
             }), 404
 
+        if order[2] not in ("Swiggy", "Zomato"):
+            return jsonify({"success": False, "message": "Only Swiggy and Zomato delivery orders use kitchen preparation statuses."}), 409
+
         print(
-            "🔥 CURRENT STATUS:",
+            " CURRENT STATUS:",
             order[1]
         )
 
@@ -277,7 +293,7 @@ def mark_ready(order_id):
         conn.commit()
 
         print(
-            "🔥 ORDER MARKED READY:",
+            " ORDER MARKED READY:",
             order_id
         )
 
@@ -295,10 +311,10 @@ def mark_ready(order_id):
         if conn:
             conn.rollback()
 
-        print("\n🔥🔥🔥 MARK READY ERROR 🔥🔥🔥")
+        print("\n MARK READY ERROR ")
         print("TYPE:", type(e).__name__)
         print("ERROR:", str(e))
-        print("🔥🔥🔥 END ERROR 🔥🔥🔥\n")
+        print(" END ERROR \n")
 
         return jsonify({
             "success": False,
@@ -320,7 +336,7 @@ def serve_order(order_id):
     conn = None
 
     try:
-        print("🔥 SERVE ORDER CALLED:", order_id)
+        print(" SERVE ORDER CALLED:", order_id)
 
         conn = get_connection()
         cursor = conn.cursor()
@@ -340,7 +356,7 @@ def serve_order(order_id):
                 "message": "Order not found"
             }), 404
 
-        print("🔥 CURRENT STATUS:", order[1])
+        print(" CURRENT STATUS:", order[1])
 
         if order[1] != "Ready":
             return jsonify({"success": False, "message": "Only ready orders can be served"}), 409
@@ -354,7 +370,7 @@ def serve_order(order_id):
 
         conn.commit()
 
-        print("🔥 ORDER SERVED:", order_id)
+        print(" ORDER SERVED:", order_id)
 
         return jsonify({
             "success": True,
@@ -370,10 +386,10 @@ def serve_order(order_id):
         if conn:
             conn.rollback()
 
-        print("\n🔥🔥🔥 SERVE ORDER ERROR 🔥🔥🔥")
+        print("\n SERVE ORDER ERROR ")
         print("TYPE:", type(e).__name__)
         print("ERROR:", str(e))
-        print("🔥🔥🔥 END ERROR 🔥🔥🔥\n")
+        print(" END ERROR \n")
 
         return jsonify({
             "success": False,

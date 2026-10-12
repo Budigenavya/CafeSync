@@ -6,15 +6,126 @@
 ==========================================================
 """
 
-from flask import Blueprint, jsonify, request, render_template
+from flask import Blueprint, jsonify, request, render_template, send_file, session
 
 from models import fetch_one, execute_query
+from database import get_connection
+from database import create_tables
 from routes.auth import login_required
+from config import DATABASE, ENABLE_SWIGGY, ENABLE_ZOMATO, SWIGGY_API_KEY, ZOMATO_API_KEY, PERSISTENT_DATA_DIR
+import os
+import sqlite3
+import tempfile
+from datetime import datetime
 
 settings_bp = Blueprint(
     "settings",
     __name__
 )
+
+
+@settings_bp.route("/settings/integrations", methods=["GET"])
+@login_required
+def integration_status():
+    if session.get("role") not in {"Admin", "Owner", "Manager"}:
+        return jsonify({"success": False, "message": "Manager access is required."}), 403
+    return jsonify({"success": True, "integrations": [
+        {"name": "Swiggy", "enabled": ENABLE_SWIGGY, "credentials_configured": bool(SWIGGY_API_KEY), "connector_implemented": False, "status": "Provider connector and approved partner credentials required"},
+        {"name": "Zomato", "enabled": ENABLE_ZOMATO, "credentials_configured": bool(ZOMATO_API_KEY), "connector_implemented": False, "status": "Provider connector and approved partner credentials required"},
+        {"name": "Payment terminal", "enabled": False, "credentials_configured": False, "status": "Payment provider SDK and merchant credentials required"},
+        {"name": "Online / QR ordering", "enabled": False, "credentials_configured": False, "status": "Customer ordering workflow and payment provider required"},
+    ], "persistent_storage": bool(PERSISTENT_DATA_DIR)})
+
+
+@settings_bp.route("/settings/backup", methods=["GET"])
+@login_required
+def download_database_backup():
+    temporary = tempfile.NamedTemporaryFile(prefix="cafesync-backup-", suffix=".db", delete=False)
+    backup_path = temporary.name
+    temporary.close()
+    source = None
+    target = None
+    try:
+        source = sqlite3.connect(DATABASE)
+        target = sqlite3.connect(backup_path)
+        source.backup(target)
+        target.close()
+        target = None
+        source.close()
+        source = None
+        response = send_file(backup_path, as_attachment=True,
+                             download_name=f"CafeSync_Backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
+                             mimetype="application/vnd.sqlite3")
+        response.call_on_close(lambda: os.path.exists(backup_path) and os.remove(backup_path))
+        return response
+    except sqlite3.Error:
+        if target:
+            target.close()
+        if source:
+            source.close()
+        try:
+            os.remove(backup_path)
+        except OSError:
+            pass
+        return jsonify({"success": False, "message": "Could not create a database backup."}), 500
+
+
+@settings_bp.route("/settings/audit-log", methods=["GET"])
+@login_required
+def audit_log_api():
+    if session.get("role") not in {"Admin", "Owner", "Manager"}:
+        return jsonify({"success": False, "message": "Manager access is required."}), 403
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT id,actor,action,entity_type,entity_id,details,created_at FROM audit_log ORDER BY id DESC LIMIT 250").fetchall()
+        return jsonify({"success": True, "entries": [dict(row) for row in rows]})
+    finally:
+        conn.close()
+
+
+@settings_bp.route("/settings/restore", methods=["POST"])
+@login_required
+def restore_database_backup():
+    if session.get("role") not in {"Admin", "Owner"}:
+        return jsonify({"success": False, "message": "Only an administrator can restore a database."}), 403
+    if str(request.form.get("confirm", "")).lower() != "true":
+        return jsonify({"success": False, "message": "Confirm database replacement before restoring."}), 400
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"success": False, "message": "Choose a SQLite backup file."}), 400
+    restore_path = None
+    source = None
+    target = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="cafesync-restore-", suffix=".db", delete=False) as temp:
+            restore_path = temp.name
+            upload.save(temp)
+        source = sqlite3.connect(f"file:{restore_path}?mode=ro", uri=True)
+        integrity = source.execute("PRAGMA quick_check").fetchone()
+        required = {"users", "products", "orders", "order_items", "settings"}
+        available = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if not integrity or integrity[0] != "ok" or not required.issubset(available):
+            return jsonify({"success": False, "message": "This file is not a valid CafeSync database backup."}), 400
+        target = sqlite3.connect(DATABASE)
+        source.backup(target)
+        target.close()
+        target = None
+        source.close()
+        source = None
+        create_tables()
+        return jsonify({"success": True, "message": "CafeSync database restored. Reload the app to use the restored data."})
+    except (sqlite3.Error, OSError):
+        return jsonify({"success": False, "message": "Could not restore this database backup."}), 500
+    finally:
+        if target:
+            target.close()
+        if source:
+            source.close()
+        if restore_path:
+            try:
+                os.remove(restore_path)
+            except OSError:
+                pass
 
 
 @settings_bp.route("/settings/billing-preferences", methods=["GET", "PUT"])
@@ -61,7 +172,7 @@ def settings():
 # ==========================================================
 
 @settings_bp.route(
-    "/settings",
+    "/settings/data",
     methods=["GET"]
 )
 def get_settings():
@@ -101,11 +212,15 @@ def get_settings():
 
 @settings_bp.route(
     "/settings/cafe",
-    methods=["PUT"]
+    methods=["GET", "PUT"]
 )
 def update_cafe_information():
 
-    data = request.json
+    if request.method == "GET":
+        settings = fetch_one("SELECT cafe_name,owner_name,address,phone,email,website,gst_number,receipt_header,receipt_footer FROM settings WHERE id=1")
+        return jsonify({"success": bool(settings), "settings": dict(settings) if settings else {}})
+
+    data = request.get_json(silent=True) or {}
 
     execute_query("""
 
@@ -121,7 +236,11 @@ def update_cafe_information():
 
             email=?,
 
-            gst_number=?
+            gst_number=?,
+
+            owner_name=?,
+
+            website=?
 
         WHERE id=1
 
@@ -135,7 +254,11 @@ def update_cafe_information():
 
         data.get("email"),
 
-        data.get("gst_number")
+        data.get("gst_number"),
+
+        data.get("owner_name"),
+
+        data.get("website")
 
     ))
 

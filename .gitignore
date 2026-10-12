@@ -1,0 +1,13 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Local credentials and runtime backups
+.env
+.cafesync-secret
+database_backup*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+database.db

@@ -9,7 +9,7 @@
 // API URL
 // ======================================================
 
-const API = "http://127.0.0.1:5000";
+const API = "";
 
 // ======================================================
 // DOM ELEMENTS
@@ -166,7 +166,8 @@ async function loadSettings() {
 
     try {
 
-        const settings = await getData("/settings");
+        const settingsResponse = await getData("/settings/data");
+        const settings = settingsResponse.settings || settingsResponse;
 
         cafeName.value = settings.cafe_name || "";
 
@@ -472,10 +473,10 @@ async function changePassword(){
 
     }
 
-    if(newPassword.value.length < 6){
+    if(newPassword.value.length < 10){
 
         showToast(
-            "Password must be at least 6 characters",
+            "Password must be at least 10 characters",
             "#dc3545"
         );
 
@@ -572,12 +573,18 @@ async function(){
 
     }
 
+    if (!window.confirm("Restore this backup and replace the current CafeSync database? Download a fresh backup first if you may need the current data.")) {
+        this.value = "";
+        return;
+    }
+
     const formData = new FormData();
 
     formData.append(
         "file",
         this.files[0]
     );
+    formData.append("confirm", "true");
 
     showLoader();
 
@@ -1145,6 +1152,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Load local preferences
     loadPreferences();
+    loadAuditLog();
+    loadIntegrationStatus();
 
     console.log("===================================");
 
@@ -1153,3 +1162,67 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("===================================");
 
 });
+
+async function loadAuditLog() {
+    const container = document.getElementById("auditLogEntries");
+    if (!container) return;
+    try {
+        const response = await fetch(`${API}/settings/audit-log`, {credentials:"same-origin"});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not load activity");
+        if (!result.entries.length) { container.textContent = "No activity recorded yet."; return; }
+        container.innerHTML = result.entries.map(entry => `<div class="audit-log-entry"><strong>${escapeAudit(entry.actor || "System")}</strong><span>${escapeAudit(entry.action.replaceAll("_", " "))} · ${escapeAudit(entry.entity_type)} ${escapeAudit(entry.entity_id)}</span><time>${escapeAudit(entry.created_at)}</time></div>`).join("");
+    } catch (error) { container.textContent = error.message; }
+}
+
+function escapeAudit(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[char]));
+}
+async function loadStaffUsers() {
+    const list = document.getElementById("staffUsersList");
+    if (!list) return;
+    try {
+        const response = await fetch(`${API}/auth/users`, {credentials:"same-origin"});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not load staff accounts");
+        if (!result.users.length) { list.textContent = "No staff logins found."; return; }
+        list.innerHTML = result.users.map(user => `<div class="audit-log-entry"><strong>${escapeAudit(user.full_name)}</strong><span>${escapeAudit(user.username)} · ${escapeAudit(user.role)} · ${user.is_active ? "Active" : "Disabled"}</span>${user.role === "Admin" || user.role === "Owner" ? "" : `<button type="button" data-user-id="${Number(user.id)}" data-active="${user.is_active ? "true" : "false"}">${user.is_active ? "Disable" : "Enable"}</button>`}</div>`).join("");
+        list.querySelectorAll("button[data-user-id]").forEach(button => button.addEventListener("click", async () => {
+            try {
+                const response = await fetch(`${API}/auth/users/${button.dataset.userId}`, {method:"PUT", credentials:"same-origin", headers:{"Content-Type":"application/json"}, body:JSON.stringify({is_active:button.dataset.active !== "true"})});
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.message || "Could not update user");
+                await loadStaffUsers();
+            } catch (error) { showToast(error.message, "#dc3545"); }
+        }));
+    } catch (error) { list.textContent = error.message; }
+}
+
+document.getElementById("staffUserForm")?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const user = Object.fromEntries(new FormData(form));
+    try {
+        const response = await fetch(`${API}/auth/users`, {method:"POST", credentials:"same-origin", headers:{"Content-Type":"application/json"}, body:JSON.stringify(user)});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not create staff login");
+        form.reset();
+        showToast(result.message);
+        await loadStaffUsers();
+    } catch (error) { showToast(error.message, "#dc3545"); }
+});
+
+loadStaffUsers();
+
+async function loadIntegrationStatus() {
+    const list = document.getElementById("integrationStatusList");
+    if (!list) return;
+    try {
+        const response = await fetch(`${API}/settings/integrations`, {credentials:"same-origin"});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not load integration status");
+        const lines = result.integrations.map(item => `<div class="audit-log-entry"><strong>${escapeAudit(item.name)}</strong><span>${escapeAudit(item.status)}</span><time>${item.connector_implemented ? "Connected" : "Not connected"}</time></div>`);
+        lines.push(`<div class="audit-log-entry"><strong>Persistent storage</strong><span>${result.persistent_storage ? "Configured" : "Set CAFESYNC_DATA_DIR and mount a persistent disk"}</span><time>${result.persistent_storage ? "Ready" : "Not configured"}</time></div>`);
+        list.innerHTML = lines.join("");
+    } catch (error) { list.textContent = error.message; }
+}

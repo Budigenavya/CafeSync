@@ -2,7 +2,7 @@
 # CafeSync Orders
 # ==========================================================
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, session
 from flask import jsonify
 from flask import request
 from flask import send_file
@@ -18,7 +18,7 @@ from openpyxl import Workbook
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-from models import get_connection
+from database import get_connection
 
 orders_bp = Blueprint(
 
@@ -1179,7 +1179,8 @@ def orders_dashboard():
                 IFNULL(SUM(CASE WHEN status='Refunded' THEN 1 ELSE 0 END),0) AS refunded
 
             FROM orders
-            WHERE DATE(created_at)=DATE('now','localtime')
+            WHERE DATE(created_at, '+5 hours', '+30 minutes') =
+                  DATE('now', '+5 hours', '+30 minutes')
 
         """)
 
@@ -1483,56 +1484,81 @@ def today_sales():
 # DELETE ORDER
 # ==========================================================
 
-@orders_bp.route(
-
-    "/orders/<int:order_id>",
-
-    methods=["DELETE"]
-
-)
-
+@orders_bp.route("/orders/<int:order_id>", methods=["DELETE"])
 def delete_order(order_id):
-
+    conn = get_connection()
     try:
-
-        conn = get_connection()
-
-        cursor = conn.cursor()
-
-        cursor.execute(
-
-            "DELETE FROM order_items WHERE order_id=?",
-
-            (order_id,)
-
-        )
-
-        cursor.execute(
-
-            "DELETE FROM orders WHERE id=?",
-
-            (order_id,)
-
-        )
-
+        conn.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
+        cursor = conn.execute("DELETE FROM orders WHERE id=?", (order_id,))
+        if cursor.rowcount == 0:
+            return error("Order Not Found", 404)
         conn.commit()
-
+        return success("Order Deleted Successfully")
+    except sqlite3.Error:
+        conn.rollback()
+        return error("Unable To Delete Order", 500)
+    finally:
         conn.close()
 
-        return success(
 
-            "Order Deleted Successfully"
-
-        )
-
-    except Exception as e:
-
-        print(e)
-
-        return error(
-
-            "Unable To Delete Order",
-
-            500
-
-        )
+@orders_bp.route("/orders/day-close", methods=["POST"])
+def close_business_day():
+    conn = get_connection()
+    try:
+        day = conn.execute("SELECT DATE('now','+5 hours','+30 minutes')").fetchone()[0]
+        existing = conn.execute("SELECT * FROM day_closings WHERE business_date=?", (day,)).fetchone()
+        if existing:
+            return jsonify({"success": False, "message": f"The shift for {day} was already closed.", "closing": dict(existing)}), 409
+        sales = conn.execute("""
+            SELECT COUNT(*) AS order_count,
+                   COALESCE(SUM(CASE WHEN payment_status='Paid' THEN total ELSE 0 END),0) AS gross_sales
+            FROM orders
+            WHERE DATE(created_at,'+5 hours','+30 minutes')=?
+              AND status NOT IN ('Cancelled','Refunded')
+        """, (day,)).fetchone()
+        refunds = conn.execute("""
+            SELECT COALESCE(SUM(ABS(amount)),0) FROM payments
+            WHERE payment_status='Refunded'
+              AND DATE(created_at,'+5 hours','+30 minutes')=?
+        """, (day,)).fetchone()[0]
+        methods = conn.execute("""
+            SELECT payment_type, COALESCE(SUM(amount),0) AS amount
+            FROM payments WHERE payment_status='Paid'
+              AND DATE(created_at,'+5 hours','+30 minutes')=?
+            GROUP BY payment_type
+        """, (day,)).fetchall()
+        payment_summary = {row[0] or "Other": round(float(row[1] or 0), 2) for row in methods}
+        legacy = conn.execute("""
+            SELECT COALESCE(payment_method,'Other'), COALESCE(SUM(total),0)
+            FROM orders o WHERE payment_status='Paid'
+              AND DATE(created_at,'+5 hours','+30 minutes')=?
+              AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id=o.id)
+            GROUP BY payment_method
+        """, (day,)).fetchall()
+        for method, amount in legacy:
+            key = method or "Other"
+            payment_summary[key] = round(payment_summary.get(key, 0) + float(amount or 0), 2)
+        cursor = conn.execute("""
+            INSERT INTO day_closings(business_date,closed_by,order_count,gross_sales,refunds,payment_summary)
+            VALUES(?,?,?,?,?,?)
+        """, (day, session.get("username", ""), sales["order_count"], sales["gross_sales"], refunds, json.dumps(payment_summary)))
+        conn.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
+                     (session.get("username", ""), "day_closed", "business_day", day,
+                      json.dumps({"order_count": sales["order_count"], "gross_sales": sales["gross_sales"], "refunds": refunds})))
+        conn.commit()
+        return jsonify({"success": True, "closing": {
+            "id": cursor.lastrowid, "business_date": day,
+            "closed_by": session.get("username", ""),
+            "order_count": sales["order_count"],
+            "gross_sales": round(float(sales["gross_sales"] or 0), 2),
+            "refunds": round(float(refunds or 0), 2),
+            "payment_summary": payment_summary
+        }})
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return jsonify({"success": False, "message": "This business day has already been closed."}), 409
+    except sqlite3.Error:
+        conn.rollback()
+        return jsonify({"success": False, "message": "Unable to close this business day."}), 500
+    finally:
+        conn.close()

@@ -101,6 +101,13 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
 
 </section>
 
+<nav class="history-tabs" id="historyTabs" aria-label="Order history categories">
+    <button type="button" class="history-tab active" data-history="all">All orders <span id="countAll">0</span></button>
+    <button type="button" class="history-tab" data-history="platform">Swiggy / Zomato <span id="countPlatform">0</span></button>
+    <button type="button" class="history-tab" data-history="cafe">Cafe orders <span id="countCafe">0</span></button>
+    <button type="button" class="history-tab" data-history="closed">Cancelled / refunded <span id="countClosed">0</span></button>
+</nav>
+
 <!-- ==========================================
                 FILTERS
 ========================================== -->
@@ -161,6 +168,8 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
         <option value="Paid">Paid</option>
         <option value="Refunded">Refunded</option>
     </select>
+
+    <button type="button" id="closeBusinessDay" class="close-business-day">Close today’s shift</button>
 
 </section>
 

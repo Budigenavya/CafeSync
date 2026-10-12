@@ -25,6 +25,7 @@ let currentPage = 1;
 const pageSize = 10;
 
 let selectedOrder = null;
+let activeHistory = "all";
 
 
 /* ==========================================================
@@ -52,6 +53,18 @@ document.getElementById("filterDate");
 const refreshBtn =
 document.getElementById("refreshOrders");
 
+document.getElementById("closeBusinessDay")?.addEventListener("click", async () => {
+    if (!window.confirm("Close today’s shift and save a sales/payment summary? This can only be closed once per business day.")) return;
+    try {
+        const response = await fetch(`${API}/orders/day-close`, {method:"POST", credentials:"same-origin"});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || "Could not close the shift.");
+        const close = result.closing;
+        const payments = Object.entries(close.payment_summary || {}).map(([method, amount]) => `${method}: ₹${Number(amount).toFixed(2)}`).join("\n");
+        window.alert(`Shift closed for ${close.business_date}\nOrders: ${close.order_count}\nPaid sales: ₹${Number(close.gross_sales).toFixed(2)}\nRefunds: ₹${Number(close.refunds).toFixed(2)}\n\n${payments || "No payments recorded"}`);
+    } catch (error) { showToast(error.message || "Could not close the shift.", false); }
+});
+
 
 /* ==========================================================
                     LOAD ORDERS
@@ -75,7 +88,13 @@ async function loadOrders(){
 
         if(result.success){
 
+            if (!Array.isArray(result.data)) {
+                throw new Error("The orders response did not contain an order list.");
+            }
+
             orders = result.data;
+
+            updateHistoryTabs();
 
             filteredOrders = [...orders];
 
@@ -214,6 +233,42 @@ function renderOrders(){
     "Page "+currentPage;
 
 }
+
+function isPlatformOrder(order){
+    return ["Swiggy", "Zomato"].includes(String(order.order_source || ""));
+}
+
+function updateHistoryTabs(){
+    const sets = {
+        all: orders,
+        platform: orders.filter(isPlatformOrder),
+        cafe: orders.filter(order => !isPlatformOrder(order) && !["Cancelled", "Refunded"].includes(order.status)),
+        closed: orders.filter(order => ["Cancelled", "Refunded"].includes(order.status))
+    };
+    for (const [key, list] of Object.entries(sets)) {
+        const count = document.getElementById(`count${key[0].toUpperCase()}${key.slice(1)}`);
+        if (count) count.textContent = list.length;
+    }
+}
+
+document.getElementById("historyTabs")?.addEventListener("click", event => {
+    const button = event.target.closest("[data-history]");
+    if (!button) return;
+    activeHistory = button.dataset.history;
+    document.querySelectorAll(".history-tab").forEach(tab => tab.classList.toggle("active", tab === button));
+    const choices = activeHistory === "platform"
+        ? ["", "Pending", "Preparing", "Ready", "Served", "Completed", "Cancelled", "Refunded"]
+        : ["", "Completed", "Cancelled", "Refunded"];
+    const labels = {"": "All Status", "Pending":"Pending", "Preparing":"Preparing", "Ready":"Ready", "Served":"Served", "Completed":"Completed", "Cancelled":"Cancelled", "Refunded":"Refunded"};
+    statusFilter.replaceChildren(...choices.map(value => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value ? labels[value] : "All Status";
+        return option;
+    }));
+    statusFilter.value = "";
+    applyFilters();
+});
 /* ==========================================================
                     CREATE ORDER ROW
 ========================================================== */
@@ -258,11 +313,7 @@ function createOrderRow(order){
 
     template.querySelector(".customer-name")
 
-        .textContent =
-
-        order.customer_name ||
-
-        "Walk-in Customer";
+        .textContent = `${order.customer_name || "Walk-in Customer"}\n${isPlatformOrder(order) ? order.order_source : (order.order_type || "Cafe")}`;
 
     template.querySelector(".item-count")
 
@@ -966,6 +1017,11 @@ function applyFilters(){
 
     filteredOrders = orders.filter(order=>{
 
+        const matchesHistory = activeHistory === "all" ||
+            (activeHistory === "platform" && isPlatformOrder(order)) ||
+            (activeHistory === "cafe" && !isPlatformOrder(order) && !["Cancelled", "Refunded"].includes(order.status)) ||
+            (activeHistory === "closed" && ["Cancelled", "Refunded"].includes(order.status));
+
         const matchesSearch =
 
             !search ||
@@ -1020,6 +1076,8 @@ function applyFilters(){
         return (
 
             matchesSearch &&
+
+            matchesHistory &&
 
             matchesStatus &&
 

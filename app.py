@@ -7,7 +7,8 @@ import os
 # DATABASE
 # ==========================
 
-from database import create_tables
+from database import create_tables, get_connection
+from config import SECRET_KEY, UPLOAD_FOLDER, DEBUG
 
 
 # ==========================
@@ -19,7 +20,7 @@ from routes.dashboard import dashboard_bp
 from routes.inventory import inventory_bp
 from routes.billing import billing_bp
 from routes.kitchen import kitchen_bp
-print("🔥 KITCHEN IMPORTED INTO APP")
+print(" KITCHEN IMPORTED INTO APP")
 from routes.orders import orders_bp
 from routes.employees import employees_bp
 from routes.reports import reports_bp
@@ -58,11 +59,21 @@ def pwa_offline_page():
 # CONFIGURATION
 # ==========================
 
-app.config["SECRET_KEY"] = "cafesync_secret_key"
+app.config["SECRET_KEY"] = SECRET_KEY
+app.config["DEBUG"] = DEBUG
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("RENDER", "").lower() == "true"
 
-app.config["UPLOAD_FOLDER"] = "uploads"
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 128 * 1024 * 1024
+
+if os.environ.get("RENDER") and not os.environ.get("CAFESYNC_DATA_DIR"):
+    app.logger.critical(
+        "CAFESYNC_DATA_DIR is not configured. Render's local filesystem is ephemeral; "
+        "attach a persistent disk and set CAFESYNC_DATA_DIR to its mount path or cafe data can be lost on deploy."
+    )
 
 
 # Enable CORS with sessions
@@ -121,6 +132,38 @@ def check_auth():
             "message": "Authentication required"
         }), 401
 
+    auth_conn = get_connection()
+    try:
+        active_user = auth_conn.execute("SELECT is_active FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    finally:
+        auth_conn.close()
+    if not active_user or not active_user[0]:
+        session.clear()
+        return jsonify({"success": False, "message": "This staff account is disabled. Contact a manager."}), 401
+
+    role = str(session.get("role") or "").strip().lower()
+    path = request.path
+    method = request.method.upper()
+    safe_methods = {"GET", "HEAD", "OPTIONS"}
+    managers = {"admin", "owner", "manager"}
+    if path.startswith(("/employees", "/employee", "/add-employee", "/update-employee", "/delete-employee")) and role not in managers:
+        return jsonify({"success": False, "message": "Manager access is required for employee records."}), 403
+    if path.startswith("/settings") and role not in managers:
+        return jsonify({"success": False, "message": "Manager access is required for cafe settings."}), 403
+    if path.startswith("/reports") and role not in managers:
+        return jsonify({"success": False, "message": "Manager access is required for reports."}), 403
+    if path.startswith("/inventory") and not safe_methods and role not in managers:
+        return jsonify({"success": False, "message": "Manager access is required to change the menu or stock."}), 403
+    if path.startswith("/orders/day-close") and role not in managers:
+        return jsonify({"success": False, "message": "Manager access is required to close the business day."}), 403
+    if method not in safe_methods and (
+        path.startswith(("/billing/cancel/", "/billing/refund/", "/billing/delete/", "/orders/refund/", "/orders/cancel/"))
+        or (path.startswith("/orders/") and method == "DELETE")
+    ) and role not in managers:
+        return jsonify({"success": False, "message": "Manager approval is required for cancellation, refunds, or deletion."}), 403
+    if path in {"/auth/create-admin", "/create-admin", "/reset-admin-password"} and role not in {"admin", "owner"}:
+        return jsonify({"success": False, "message": "Administrator access is required."}), 403
+
 
 
 # ==========================
@@ -142,11 +185,11 @@ app.register_blueprint(
 )
 
 
-print("🔥 ABOUT TO REGISTER BILLING")
+print(" ABOUT TO REGISTER BILLING")
 
 app.register_blueprint(billing_bp)
 
-print("🔥 BILLING BLUEPRINT REGISTERED")
+print(" BILLING BLUEPRINT REGISTERED")
 
 print("\n========== BILLING ROUTES ==========")
 
@@ -155,7 +198,7 @@ for rule in app.url_map.iter_rules():
         print(rule, "->", rule.endpoint, rule.methods)
 
 
-print("🔥 ABOUT TO REGISTER KITCHEN")
+print(" ABOUT TO REGISTER KITCHEN")
 
 app.register_blueprint(kitchen_bp)
 
@@ -164,7 +207,7 @@ print("\n========== ALL KITCHEN ROUTES ==========")
 for rule in app.url_map.iter_rules():
     if "kitchen" in str(rule):
         print(rule, "->", rule.endpoint)
-print("🔥 REGISTERED KITCHEN BLUEPRINT")
+print(" REGISTERED KITCHEN BLUEPRINT")
 
 
 app.register_blueprint(

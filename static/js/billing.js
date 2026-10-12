@@ -30,6 +30,7 @@ let defaultDiscountPercentage = 0;
 let maximumDiscountPercentage = 30;
 let allowManualDiscount = false;
 let showGSTOnReceipt = true;
+let cafePreferences = {cafe_name:"CafeSync", address:"", phone:"", gst_number:"", receipt_header:"", receipt_footer:""};
 
 let currentOrder = null;
 
@@ -82,6 +83,7 @@ async function initializePOS(){
     initializeTheme();
 
     await loadBillingPreferences();
+    await loadCafeReceiptInfo();
 
     await loadCategories();
 
@@ -132,6 +134,14 @@ async function loadBillingPreferences(){
     }catch(error){ console.warn("Billing settings could not be loaded", error); }
 }
 
+async function loadCafeReceiptInfo(){
+    try {
+        const response = await fetch(`${API}/settings/cafe`, {credentials:"same-origin"});
+        const result = await response.json();
+        if (response.ok && result.success) cafePreferences = {...cafePreferences, ...result.settings};
+    } catch (error) { console.warn("Cafe details could not be loaded for receipts", error); }
+}
+
 function getDiscountAmount(subtotal){
     const input = document.getElementById("discount");
     let percentage = Number(input?.value ?? defaultDiscountPercentage);
@@ -180,6 +190,7 @@ function initializeOrderType(){
     const buttons = document.querySelectorAll(".order-type-btn");
     const selector = document.getElementById("tableNo");
     const tableField = selector?.parentElement;
+    const sourceField = document.getElementById("deliverySourceField");
 
     buttons.forEach(button => button.addEventListener("click", () => {
 
@@ -189,6 +200,7 @@ function initializeOrderType(){
         if(tableField){
             tableField.classList.toggle("table-hidden", selectedOrderType !== "Dine In");
         }
+        if(sourceField) sourceField.hidden = selectedOrderType !== "Delivery";
 
         if(selectedOrderType !== "Dine In" && selector) selector.value = "";
 
@@ -566,7 +578,7 @@ function renderProducts(productList){
 
             <div class="product-image">
 
-                <img src="/static/images/products/${product.image || 'default.png'}">
+                <img src="${product.image_url || `/static/images/products/${product.image || 'default.png'}`}" alt="${product.name || 'Product'}" loading="lazy">
 
             </div>
 
@@ -586,12 +598,12 @@ function renderProducts(productList){
 
                 <div class="product-price">
 
-                    ₹${Number(product.price).toFixed(2)}
+                ${product.is_billable === false ? "Price required" : `₹${Number(product.price).toFixed(2)}`}
 
                 </div>
 
                 <button
-                    class="add-btn">
+                    class="add-btn" ${product.is_billable === false ? "disabled title=\"Set a valid price in Inventory before selling\"" : ""}>
 
                     <i class="fas fa-cart-plus"></i>
 
@@ -1187,6 +1199,8 @@ async function checkout(options={}){
 
         order_type: selectedOrderType,
 
+        order_source: document.getElementById("deliverySource")?.value || "Cafe",
+
         customer:
         document.getElementById("customerName").value,
 
@@ -1415,6 +1429,8 @@ if (kotBtn) {
             customer_id: customerInput?.dataset.customerId || null,
 
 	    order_type: selectedOrderType,
+
+            order_source: document.getElementById("deliverySource")?.value || "Cafe",
 
     	    subtotal: subtotalValue,
 
@@ -2356,7 +2372,11 @@ function generateReceiptHTML(){
 
     <body>
 
-        <h2>CafeSync POS</h2>
+        <h2>${escapeReceiptText(cafePreferences.cafe_name || "Cafe")}</h2>
+        ${cafePreferences.receipt_header ? `<p>${escapeReceiptText(cafePreferences.receipt_header)}</p>` : ""}
+        ${cafePreferences.address ? `<p>${escapeReceiptText(cafePreferences.address)}</p>` : ""}
+        ${cafePreferences.phone ? `<p>Phone: ${escapeReceiptText(cafePreferences.phone)}</p>` : ""}
+        ${cafePreferences.gst_number ? `<p>GSTIN: ${escapeReceiptText(cafePreferences.gst_number)}</p>` : ""}
 
         <p>
 
@@ -2414,6 +2434,8 @@ function generateReceiptHTML(){
                 ₹${total.toFixed(2)}
 
             </h3>
+
+            ${cafePreferences.receipt_footer ? `<p>${escapeReceiptText(cafePreferences.receipt_footer)}</p>` : ""}
 
         </div>
 
