@@ -1656,3 +1656,219 @@ def import_missing_products():
 # ==========================================================
 # END OF FILE
 # ==========================================================
+
+
+# ==========================================================
+# TEMPORARY PROTECTED PRODUCT PRICE/STOCK RECOVERY
+# Remove this endpoint after successful recovery.
+# ==========================================================
+
+@inventory_bp.route(
+    "/inventory/temporary-price-stock-recovery",
+    methods=["POST"]
+)
+@login_required
+def temporary_price_stock_recovery():
+    import hmac
+
+    expected_token = os.environ.get(
+        "CAFESYNC_PRICE_RECOVERY_TOKEN", ""
+    ).strip()
+
+    if len(expected_token) < 32:
+        return jsonify({
+            "success": False,
+            "message": "Recovery endpoint is not configured."
+        }), 503
+
+    supplied_token = request.headers.get(
+        "X-CafeSync-Recovery-Token", ""
+    )
+
+    if not hmac.compare_digest(supplied_token, expected_token):
+        return jsonify({
+            "success": False,
+            "message": "Invalid recovery token."
+        }), 403
+
+    upload = request.files.get("file")
+
+    if not upload or not upload.filename:
+        return jsonify({
+            "success": False,
+            "message": "Upload the recovery JSON file."
+        }), 400
+
+    try:
+        raw = upload.read(256 * 1024 + 1)
+
+        if len(raw) > 256 * 1024:
+            return jsonify({
+                "success": False,
+                "message": "Recovery file is too large."
+            }), 400
+
+        payload = json.loads(raw.decode("utf-8"))
+
+        if not isinstance(payload, list) or len(payload) != 82:
+            return jsonify({
+                "success": False,
+                "message": "Expected exactly 82 product records."
+            }), 400
+
+        validated = []
+        seen_ids = set()
+
+        for item in payload:
+            if not isinstance(item, dict):
+                raise ValueError("Invalid product record.")
+
+            product_id = item.get("id")
+            name = item.get("name")
+            price = item.get("price")
+            stock = item.get("stock")
+
+            if (
+                isinstance(product_id, bool)
+                or not isinstance(product_id, int)
+                or product_id <= 0
+                or product_id in seen_ids
+            ):
+                raise ValueError("Invalid or duplicate product ID.")
+
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("Invalid product name.")
+
+            if (
+                isinstance(price, bool)
+                or not isinstance(price, (int, float))
+                or not math.isfinite(price)
+                or price < 0
+            ):
+                raise ValueError("Invalid product price.")
+
+            if (
+                isinstance(stock, bool)
+                or not isinstance(stock, int)
+                or stock < 0
+            ):
+                raise ValueError("Invalid product stock.")
+
+            seen_ids.add(product_id)
+            validated.append((
+                float(price),
+                stock,
+                product_id,
+                name.strip()
+            ))
+
+        conn = get_connection()
+
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+
+            db_products = conn.execute(
+                "SELECT id, name FROM products ORDER BY id"
+            ).fetchall()
+
+            if len(db_products) != 82:
+                raise ValueError(
+                    "The live database does not contain exactly 82 products. "
+                    "No changes were saved."
+                )
+
+            db_by_id = {
+                row["id"]: row["name"].strip()
+                for row in db_products
+            }
+
+            for price, stock, product_id, name in validated:
+                if db_by_id.get(product_id) != name:
+                    raise ValueError(
+                        "Product IDs or names do not match the live database. "
+                        "No changes were saved."
+                    )
+
+            conn.executemany(
+                """
+                UPDATE products
+                SET price = ?, stock = ?
+                WHERE id = ?
+                """,
+                [
+                    (price, stock, product_id)
+                    for price, stock, product_id, name in validated
+                ]
+            )
+
+
+            verified = conn.execute(
+                """
+                SELECT id, price, stock
+                FROM products
+                ORDER BY id
+                """
+            ).fetchall()
+
+            expected = {
+                product_id: (price, stock)
+                for price, stock, product_id, name in validated
+            }
+
+            if len(verified) != 82:
+                raise ValueError(
+                    "Verification failed: unexpected product count."
+                )
+
+            for row in verified:
+                expected_values = expected.get(row["id"])
+
+                if expected_values is None:
+                    raise ValueError(
+                        "Verification failed: unexpected product ID."
+                    )
+
+                expected_price, expected_stock = expected_values
+
+                if (
+                    float(row["price"]) != expected_price
+                    or row["stock"] != expected_stock
+                ):
+                    raise ValueError(
+                        "Verification failed: price or stock mismatch."
+                    )
+
+            conn.commit()
+
+            return jsonify({
+                "success": True,
+                "updated": 82,
+                "message": (
+                    "All 82 product price and stock records "
+                    "were updated successfully."
+                )
+            })
+
+        except Exception:
+            conn.rollback()
+            raise
+
+        finally:
+            conn.close()
+
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        return jsonify({
+            "success": False,
+            "message": str(exc)
+        }), 400
+
+    except sqlite3.Error:
+        current_app.logger.exception(
+            "Temporary product recovery failed."
+        )
+        return jsonify({
+            "success": False,
+            "message": (
+                "Database operation failed. Changes were rolled back."
+            )
+        }), 500
