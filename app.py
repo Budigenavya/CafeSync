@@ -8,7 +8,7 @@ import os
 # ==========================
 
 from database import create_tables, get_connection
-from config import SECRET_KEY, UPLOAD_FOLDER, DEBUG
+from config import SECRET_KEY, UPLOAD_FOLDER, DEBUG, USE_POSTGRES
 
 
 # ==========================
@@ -88,7 +88,13 @@ CORS(
 # DATABASE INITIALIZATION
 # ==========================
 
-create_tables()
+if USE_POSTGRES:
+    app.logger.warning(
+        "PostgreSQL mode is enabled; skipping automatic database initialization. "
+        "Verify PostgreSQL compatibility before serving requests."
+    )
+else:
+    create_tables()
 
 
 
