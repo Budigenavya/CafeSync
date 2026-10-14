@@ -27,6 +27,10 @@ class HybridRow(dict):
 
 
 def _hybrid_row_factory(cursor):
+    # Psycopg also asks for a row factory for commands such as SET/UPDATE,
+    # where there is no result description (and therefore no rows to adapt).
+    if cursor.description is None:
+        return lambda values: values
     names = [column.name for column in cursor.description]
     return lambda values: HybridRow(names, values)
 
