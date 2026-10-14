@@ -312,6 +312,9 @@ body{
 .item-count{
 
     color:#666;
+    max-width:280px;
+    white-space:normal;
+    overflow-wrap:anywhere;
 
 }
 

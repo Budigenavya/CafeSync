@@ -315,13 +315,15 @@ function createOrderRow(order){
 
         .textContent = `${order.customer_name || "Walk-in Customer"}\n${isPlatformOrder(order) ? order.order_source : (order.order_type || "Cafe")}`;
 
-    template.querySelector(".item-count")
-
-        .textContent =
-
-        order.total_items +
-
-        " Items";
+    const itemCell = template.querySelector(".item-count");
+    const itemSummary = (order.items || []).map(item => {
+        const itemName = item.name || item.product_name || `Product #${item.product_id}`;
+        return `${item.quantity} × ${itemName}`;
+    });
+    itemCell.textContent = itemSummary.length
+        ? itemSummary.join(", ")
+        : `${order.total_items || 0} Items`;
+    itemCell.title = `${order.total_items || 0} total items`;
 
     template.querySelector(".order-total")
 
