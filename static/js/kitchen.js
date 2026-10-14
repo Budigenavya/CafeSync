@@ -77,7 +77,7 @@ async function loadKitchenOrders(){
 
             kitchenOrders = result.data || [];
             kitchenLoaded = true;
-            document.getElementById("completedTakeawayCount").textContent = result.completed_takeaway_today || 0;
+            document.getElementById("completedTakeawayCount").textContent = result.completed_today ?? result.completed_takeaway_today ?? 0;
 
             updateSummary();
 
@@ -150,8 +150,8 @@ function renderOrders(){
 
         const card = createOrderCard(order);
 
-        if(order.order_type === "Parcel" || order.order_type === "Take Away"){
-            if(order.status === "Completed") completedTakeawayContainer.appendChild(card);
+        if (["Completed", "Served"].includes(order.status)) {
+            completedTakeawayContainer.appendChild(card);
         }
         else if(order.order_source === "Swiggy" || order.order_source === "Zomato"){
             if(order.status==="Pending") pendingContainer.appendChild(card);
@@ -185,7 +185,7 @@ function createOrderCard(order){
     card.dataset.id = order.id;
     card.dataset.status = String(order.status || "Pending").toLowerCase();
     const isTakeaway = order.order_type === "Parcel" || order.order_type === "Take Away";
-    if (isTakeaway && order.status === "Completed") card.classList.add("completed-takeaway-card");
+    if (["Completed", "Served"].includes(order.status)) card.classList.add("completed-takeaway-card");
 
     template.querySelector(".table-name")
 
@@ -196,7 +196,9 @@ function createOrderCard(order){
         .textContent = order.order_number || order.bill_no || `#${order.id}`;
 
     const channel = template.querySelector(".order-channel");
-    channel.textContent = isTakeaway ? "Takeaway · Completed" : `${order.order_source || "Delivery"} · ${order.status}`;
+    const orderChannel = isTakeaway ? "Takeaway" :
+        (order.order_source && order.order_source !== "Cafe" ? `${order.order_source} Delivery` : (order.order_type || "Cafe"));
+    channel.textContent = `${orderChannel} · ${order.status}`;
 
     template.querySelector(".customer-name")
 
@@ -269,7 +271,7 @@ function createOrderCard(order){
     template.querySelector(".btn-served")
         ?.remove();
 
-    if (isTakeaway || order.order_source === "Cafe") {
+    if (isTakeaway || order.order_source === "Cafe" || ["Completed", "Served"].includes(order.status)) {
         template.querySelector(".order-actions").hidden = true;
     }
 
@@ -322,10 +324,8 @@ function updateSummary(){
     document.getElementById("pendingLaneCount").textContent = document.getElementById("pendingCount").textContent;
     document.getElementById("preparingLaneCount").textContent = document.getElementById("preparingCount").textContent;
     document.getElementById("readyLaneCount").textContent = document.getElementById("readyCount").textContent;
-    const completedTakeaway = kitchenOrders.filter(o =>
-        ["Parcel", "Take Away"].includes(o.order_type) && o.status === "Completed"
-    ).length;
-    document.getElementById("completedTakeawayLaneCount").textContent = completedTakeaway;
+    const completedToday = kitchenOrders.filter(o => ["Completed", "Served"].includes(o.status)).length;
+    document.getElementById("completedTakeawayLaneCount").textContent = completedToday;
 
 }
 

@@ -90,9 +90,9 @@ def get_kitchen_orders():
                 COALESCE(o.order_source, 'Cafe') IN ('Swiggy', 'Zomato')
                 AND o.status IN ('Pending', 'Preparing', 'Ready')
             ) OR (
-                COALESCE(o.order_source, 'Cafe')='Cafe'
-                AND o.order_type IN ('Parcel', 'Take Away')
-                AND o.status='Completed'
+                o.status IN ('Completed', 'Served')
+                AND DATE(datetime(o.created_at, '+5 hours', '+30 minutes')) =
+                    DATE('now', '+5 hours', '+30 minutes')
             )
 
             ORDER BY o.created_at ASC
@@ -139,13 +139,12 @@ def get_kitchen_orders():
 
             orders.append(order_data)
 
-        served_today = conn.execute("""
+        completed_today = conn.execute("""
             SELECT COUNT(*)
             FROM orders
-            WHERE COALESCE(order_source, 'Cafe')='Cafe'
-              AND order_type IN ('Parcel', 'Take Away')
-              AND status='Completed'
-              AND DATE(created_at,'localtime')=DATE('now','localtime')
+            WHERE status IN ('Completed', 'Served')
+              AND DATE(datetime(created_at, '+5 hours', '+30 minutes')) =
+                  DATE('now', '+5 hours', '+30 minutes')
         """).fetchone()[0]
 
         conn.close()
@@ -154,7 +153,8 @@ def get_kitchen_orders():
             "success": True,
             "message": "Kitchen Orders Loaded",
             "data": orders,
-            "completed_takeaway_today": served_today
+            "completed_today": completed_today,
+            "completed_takeaway_today": completed_today
         })
 
     except Exception as e:
