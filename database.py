@@ -1,15 +1,31 @@
 import os
 import sqlite3
 import shutil
+import psycopg
+
 from werkzeug.security import generate_password_hash
 
-from config import DATABASE
+from config import DATABASE, DATABASE_URL, USE_POSTGRES
+from db_compat import PostgresConnection
 
 # ==========================================================
 # DATABASE CONNECTION
 # ==========================================================
 
 def get_connection():
+
+    print(
+        f"[DB DIAGNOSTIC] USE_POSTGRES={USE_POSTGRES}, "
+        f"DATABASE_URL_CONFIGURED={bool(DATABASE_URL)}"
+    )
+
+    if USE_POSTGRES:
+        connection = PostgresConnection(DATABASE_URL)
+        print(
+            f"[DB DIAGNOSTIC] Connection type="
+            f"{type(connection).__name__}"
+        )
+        return connection
 
     db_dir = os.path.dirname(DATABASE)
 
@@ -30,7 +46,26 @@ def get_connection():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
 
+    print("[DB DIAGNOSTIC] Connection type=SQLite")
     return conn
+def get_postgres_connection():
+    """
+    Open a separate PostgreSQL connection.
+    This function does not change the existing SQLite connection.
+    """
+
+    if not USE_POSTGRES:
+        raise RuntimeError(
+            "PostgreSQL mode is disabled. "
+            "Set CAFESYNC_USE_POSTGRES=true to enable it."
+        )
+
+    if not DATABASE_URL:
+        raise RuntimeError(
+            "DATABASE_URL is not configured."
+        )
+
+    return PostgresConnection(DATABASE_URL)
 
 
 # ==========================================================
@@ -355,6 +390,9 @@ def create_tables():
             if column not in order_columns:
                 cursor.execute(f"ALTER TABLE orders ADD COLUMN {column} {definition}")
                 order_columns.add(column)
+        if "rider_id" not in order_columns:
+            cursor.execute("ALTER TABLE orders ADD COLUMN rider_id INTEGER")
+            order_columns.add("rider_id")
         cursor.execute("""
             UPDATE orders
             SET status='Completed'
@@ -362,6 +400,33 @@ def create_tables():
               AND order_type IN ('Parcel', 'Take Away', 'Dine In')
               AND status IN ('Pending', 'Preparing', 'Ready', 'Served')
         """)
+
+        # Delivery routes use the same normalized order/customer data as the
+        # rest of the application. Riders are the one delivery-specific table.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS riders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT NOT NULL DEFAULT '',
+                vehicle TEXT NOT NULL DEFAULT '',
+                vehicle_number TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'Available',
+                current_location TEXT NOT NULL DEFAULT ''
+            )
+        """)
+        if USE_POSTGRES:
+            cursor.execute("""
+                SELECT 1 FROM information_schema.table_constraints
+                WHERE constraint_schema=current_schema()
+                  AND table_name='orders'
+                  AND constraint_name='orders_rider_id_fkey'
+            """)
+            if cursor.fetchone() is None:
+                cursor.execute("""
+                    ALTER TABLE orders
+                    ADD CONSTRAINT orders_rider_id_fkey
+                    FOREIGN KEY (rider_id) REFERENCES riders(id)
+                """)
 
         # ==========================================================
         # ORDER ITEMS
@@ -631,6 +696,14 @@ def create_tables():
 
         if cursor.fetchone()[0] == 0:
 
+            admin_password = os.environ.get("CAFESYNC_ADMIN_PASSWORD", "").strip()
+            if USE_POSTGRES and not admin_password:
+                raise RuntimeError(
+                    "Set CAFESYNC_ADMIN_PASSWORD before initializing an empty PostgreSQL database."
+                )
+            if not admin_password:
+                admin_password = "admin123"
+
             cursor.execute("""
 
             INSERT INTO users(
@@ -647,7 +720,7 @@ def create_tables():
 
             VALUES(?, ?, ?, 'Admin')
 
-            """, ("Administrator", "admin", generate_password_hash(os.environ.get("CAFESYNC_ADMIN_PASSWORD", "admin123"))))
+            """, ("Administrator", "admin", generate_password_hash(admin_password)))
 
             print("[OK] Default Admin Created")
 
@@ -852,6 +925,34 @@ def create_tables():
             )
 
             print("[OK] Sample Products Added")
+
+        if USE_POSTGRES:
+            cursor.execute("""
+                SELECT table_name FROM information_schema.columns
+                WHERE table_schema=current_schema() AND column_name='id'
+                  AND (left(column_default, 8)='nextval(' OR is_identity='YES')
+            """)
+            serial_tables = [row["table_name"] for row in cursor.fetchall()]
+            for table_name in serial_tables:
+                quoted_table = '"' + table_name.replace('"', '""') + '"'
+                cursor.execute(f"""
+                    SELECT setval(pg_get_serial_sequence(%s, 'id'),
+                                  GREATEST(COALESCE(MAX(id), 1), 1), COUNT(*) > 0)
+                    FROM {quoted_table}
+                """, (table_name,))
+
+            cursor.execute("""
+                SELECT 1 FROM information_schema.table_constraints
+                WHERE constraint_schema=current_schema()
+                  AND table_name='ingredient_movements'
+                  AND constraint_name='ingredient_movements_order_id_fkey'
+            """)
+            if cursor.fetchone() is None:
+                cursor.execute("""
+                    ALTER TABLE ingredient_movements
+                    ADD CONSTRAINT ingredient_movements_order_id_fkey
+                    FOREIGN KEY (order_id) REFERENCES orders(id)
+                """)
         # ==========================================================
         # COMMIT CHANGES
         # ==========================================================
@@ -883,6 +984,9 @@ def create_tables():
 # ==========================================================
 
 def reset_database():
+
+    if USE_POSTGRES:
+        raise RuntimeError("reset_database is a SQLite-only development utility.")
 
     if os.path.exists(DATABASE):
 
