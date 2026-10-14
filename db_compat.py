@@ -370,6 +370,10 @@ class PostgresConnection:
     def __init__(self, dsn):
         self.raw = psycopg.connect(dsn, sslmode="require", connect_timeout=10,
                                    row_factory=_hybrid_row_factory)
+        # CafeSync's tables and the verified migrated catalog live in public.
+        # Don't let a role-specific schema earlier in PostgreSQL's default
+        # search_path shadow those tables with an empty/stale copy.
+        self.raw.execute("SET search_path TO public")
         self._row_factory = None
 
     @property
