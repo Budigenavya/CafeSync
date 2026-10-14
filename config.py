@@ -1,11 +1,14 @@
 import os
 import secrets
+from dotenv import load_dotenv
 
 # ======================================================
 # CafeSync Configuration
 # ======================================================
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(os.path.join(os.path.dirname(BASE_DIR), ".env"), override=False)
 
 # ===========================
 # Flask
@@ -20,12 +23,32 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # development installs simple.
 PERSISTENT_DATA_DIR = os.environ.get("CAFESYNC_DATA_DIR")
 DATABASE = os.path.join(PERSISTENT_DATA_DIR, "database.db") if PERSISTENT_DATA_DIR else os.path.join(BASE_DIR, "database.db")
+# PostgreSQL is opt-in. Keep SQLite as the default until compatibility testing passes.
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+USE_POSTGRES = (
+    os.environ.get("CAFESYNC_USE_POSTGRES", "false").strip().lower()
+    in {"1", "true", "yes"}
+)
+
+if USE_POSTGRES and not DATABASE_URL:
+    raise RuntimeError(
+        "CAFESYNC_USE_POSTGRES is enabled, but DATABASE_URL is not configured."
+    )
 
 
 def _secret_key():
     configured = os.environ.get("CAFESYNC_SECRET_KEY", "").strip()
     if configured:
         return configured
+
+    # A PostgreSQL deployment should keep its Flask signing key in Render's
+    # environment, not in the service's ephemeral filesystem or an unrelated
+    # SQLite disk mount.
+    if USE_POSTGRES:
+        raise RuntimeError(
+            "PostgreSQL mode requires CAFESYNC_SECRET_KEY to be configured "
+            "in the service environment."
+        )
 
     # Never ship a public, predictable Flask signing key. Keep the generated
     # key beside the persistent data when available so sessions survive restarts.
