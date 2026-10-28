@@ -12,7 +12,7 @@ from models import fetch_one, execute_query
 from database import get_connection
 from database import create_tables
 from routes.auth import login_required
-from config import DATABASE, ENABLE_SWIGGY, ENABLE_ZOMATO, SWIGGY_API_KEY, ZOMATO_API_KEY, PERSISTENT_DATA_DIR
+from config import DATABASE, ENABLE_SWIGGY, ENABLE_ZOMATO, SWIGGY_API_KEY, ZOMATO_API_KEY, PERSISTENT_DATA_DIR, USE_POSTGRES
 import os
 import sqlite3
 import tempfile
@@ -40,6 +40,8 @@ def integration_status():
 @settings_bp.route("/settings/backup", methods=["GET"])
 @login_required
 def download_database_backup():
+    if USE_POSTGRES:
+        return jsonify({"success": False, "message": "Use Supabase's database backup/export tools while PostgreSQL mode is enabled."}), 501
     temporary = tempfile.NamedTemporaryFile(prefix="cafesync-backup-", suffix=".db", delete=False)
     backup_path = temporary.name
     temporary.close()
@@ -86,6 +88,8 @@ def audit_log_api():
 @settings_bp.route("/settings/restore", methods=["POST"])
 @login_required
 def restore_database_backup():
+    if USE_POSTGRES:
+        return jsonify({"success": False, "message": "SQLite backup files cannot be restored into PostgreSQL. Use a PostgreSQL-format export and migration instead."}), 501
     if session.get("role") not in {"Admin", "Owner"}:
         return jsonify({"success": False, "message": "Only an administrator can restore a database."}), 403
     if str(request.form.get("confirm", "")).lower() != "true":

@@ -7,10 +7,9 @@
 ==========================================================
 """
 
-import sqlite3
 from datetime import datetime
 
-from config import DATABASE
+from database import get_connection as _get_database_connection
 
 
 # ==========================================================
@@ -18,11 +17,7 @@ from config import DATABASE
 # ==========================================================
 
 def get_connection():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    return _get_database_connection()
 
 
 # ==========================================================

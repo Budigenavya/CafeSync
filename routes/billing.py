@@ -50,8 +50,10 @@ print(" BILLING FILE:", __file__)
 # ==========================================================
 
 def dict_from_row(row):
-
-    return dict(zip(row.keys(), row))
+    # sqlite3.Row and the PostgreSQL HybridRow both expose a mapping interface.
+    # Iterating a mapping yields its keys, so zipping row.keys() with row
+    # silently produced {column: column} for PostgreSQL results.
+    return dict(row)
 
 
 def invoice_payload(conn, order_id):
@@ -841,7 +843,8 @@ def create_order():
 
         cursor.execute("INSERT INTO audit_log(actor,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)",
                        (session.get("username", ""), "order_created", "order", str(order_id),
-                        json.dumps({"bill_no": bill_no, "total": total, "status": "Pending"})))
+                        json.dumps({"bill_no": bill_no, "total": total, "status": order_status,
+                                    "order_type": order_type, "order_source": order_source})))
 
         conn.commit()
 
@@ -2314,7 +2317,10 @@ def create_kot():
             "message": "Kitchen Order Created",
             "data": {
                 "order_id": order_id,
-                "bill_no": bill_no
+            "bill_no": bill_no,
+            "order_type": order_type,
+            "order_source": order_source,
+            "status": order_status
             }
         }), 200
 

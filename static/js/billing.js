@@ -1268,8 +1268,9 @@ async function checkout(options={}){
                 printWindow.print();
             }
 
+            const isTakeawayBill = ["Parcel", "Take Away"].includes(data.order_type || payload.order_type);
             const splitMessage = !options.splitOrder
-                ? "Bill Saved Successfully"
+                ? (isTakeawayBill ? `Takeaway order saved as Completed · ${data.bill_no || ""}` : "Bill Saved Successfully")
                 : !splitPaymentSaved
                     ? "Order saved, but split payments were not recorded. Check the order before retrying."
                     : options.splitOrder.payments.length
