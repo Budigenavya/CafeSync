@@ -964,7 +964,7 @@ def report_tables():
             LEFT JOIN categories c
                 ON p.category_id = c.id
 
-            WHERE p.stock <= 15
+            WHERE p.stock_unlimited=0 AND p.stock <= 15
 
             ORDER BY p.stock ASC
         """)
@@ -1505,7 +1505,7 @@ def low_stock_count():
 
             FROM products
 
-            WHERE stock<=10
+            WHERE stock_unlimited=0 AND stock<=10
 
         """)
 

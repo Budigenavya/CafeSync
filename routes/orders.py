@@ -446,7 +446,7 @@ def cancel_order(order_id):
 
                 SET stock = stock + ?
 
-                WHERE id = ?
+                WHERE id = ? AND stock_unlimited = 0
 
             """,
 

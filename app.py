@@ -7,7 +7,7 @@ import os
 # DATABASE
 # ==========================
 
-from database import create_tables, get_connection
+from database import create_tables, ensure_product_stock_unlimited_column, get_connection
 from config import SECRET_KEY, UPLOAD_FOLDER, DEBUG, USE_POSTGRES
 
 
@@ -93,6 +93,7 @@ if USE_POSTGRES:
         "PostgreSQL mode is enabled; skipping automatic database initialization. "
         "Verify PostgreSQL compatibility before serving requests."
     )
+    ensure_product_stock_unlimited_column()
 else:
     create_tables()
 

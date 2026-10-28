@@ -68,6 +68,23 @@ def get_postgres_connection():
     return PostgresConnection(DATABASE_URL)
 
 
+def ensure_product_stock_unlimited_column():
+    """Apply the small additive migration needed for optional product stock tracking."""
+    conn = get_connection()
+    try:
+        if USE_POSTGRES:
+            # IF NOT EXISTS makes this safe when Gunicorn workers start together.
+            conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_unlimited INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+        else:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
+            if "stock_unlimited" not in columns:
+                conn.execute("ALTER TABLE products ADD COLUMN stock_unlimited INTEGER NOT NULL DEFAULT 0")
+                conn.commit()
+    finally:
+        conn.close()
+
+
 # ==========================================================
 # CREATE TABLES
 # ==========================================================
@@ -146,6 +163,7 @@ def create_tables():
             price REAL NOT NULL,
 
             stock INTEGER DEFAULT 0,
+            stock_unlimited INTEGER NOT NULL DEFAULT 0,
 
             is_available INTEGER NOT NULL DEFAULT 1,
 
@@ -169,6 +187,9 @@ def create_tables():
             row[1]
             for row in cursor.execute("PRAGMA table_info(products)").fetchall()
         }
+        if "stock_unlimited" not in product_columns:
+            cursor.execute("ALTER TABLE products ADD COLUMN stock_unlimited INTEGER NOT NULL DEFAULT 0")
+            product_columns.add("stock_unlimited")
         if "is_available" not in product_columns:
             cursor.execute("ALTER TABLE products ADD COLUMN is_available INTEGER NOT NULL DEFAULT 1")
         if "image" not in product_columns:

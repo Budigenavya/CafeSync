@@ -470,7 +470,15 @@ function renderProducts(data){
 
         let statusText="Available";
 
-        if(product.stock<=0){
+        if(Number(product.stock_unlimited)===1){
+
+            status="available";
+
+            statusText="Unlimited";
+
+        }
+
+        else if(product.stock<=0){
 
             status="out";
 
@@ -520,7 +528,7 @@ function renderProducts(data){
 
             <td>
 
-                ${product.stock}
+                ${Number(product.stock_unlimited)===1 ? "Unlimited" : product.stock}
 
             </td>
 
@@ -608,7 +616,7 @@ function renderLowStock(){
 
     products.filter(
 
-        p=>p.stock<=10
+        p=>Number(p.stock_unlimited)!==1 && p.stock<=10
 
     );
 
@@ -652,7 +660,7 @@ function renderLowStock(){
 
             <td>
 
-                ${product.stock}
+                ${Number(product.stock_unlimited)===1 ? "Unlimited" : product.stock}
 
             </td>
 
@@ -708,6 +716,12 @@ document.getElementById("deleteModal");
 document.addEventListener("DOMContentLoaded", () => {
 
     const addProductBtn = document.getElementById("addProductBtn");
+    const stockUnlimited = document.getElementById("stockUnlimited");
+    const stockInput = document.getElementById("stock");
+
+    stockUnlimited.addEventListener("change", () => {
+        stockInput.disabled = stockUnlimited.checked;
+    });
 
     if(addProductBtn){
 
@@ -716,6 +730,7 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("productModalTitle").textContent = "Add Product";
 
             document.getElementById("productForm").reset();
+            stockInput.disabled = false;
 
             document.getElementById("productId").value = "";
             document.getElementById("productImagePreview").hidden = true;
@@ -778,6 +793,7 @@ async function(e){
     product.append("barcode", document.getElementById("barcode").value);
     product.append("price", document.getElementById("price").value);
     product.append("stock", document.getElementById("stock").value);
+    product.append("stock_unlimited", document.getElementById("stockUnlimited").checked ? "true" : "false");
     const photo = document.getElementById("productImage").files[0];
     if (photo) product.append("image", photo);
 
@@ -891,6 +907,9 @@ function editProduct(id){
     document
     .getElementById("stock")
     .value = product.stock;
+
+    document.getElementById("stockUnlimited").checked = Number(product.stock_unlimited) === 1;
+    document.getElementById("stock").disabled = Number(product.stock_unlimited) === 1;
 
     const preview = document.getElementById("productImagePreview");
     document.getElementById("productImage").value = "";
@@ -1180,7 +1199,7 @@ function filterProducts(){
 
         filtered = filtered.filter(product =>
 
-            product.stock>0 && product.stock<=10
+            Number(product.stock_unlimited)!==1 && product.stock<=10
 
         );
 
@@ -1190,7 +1209,7 @@ function filterProducts(){
 
         filtered = filtered.filter(product =>
 
-            product.stock>10
+            product.stock>10 || Number(product.stock_unlimited)===1
 
         );
 

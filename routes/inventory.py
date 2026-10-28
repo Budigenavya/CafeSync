@@ -77,6 +77,14 @@ def _product_payload():
     return request.get_json(silent=True) or {}
 
 
+def _product_stock_values(data):
+    unlimited = str(data.get("stock_unlimited", "false")).strip().lower() in {"1", "true", "yes", "on"}
+    stock = int(data.get("stock", 0) or 0)
+    if stock < 0:
+        raise ValueError
+    return stock, int(unlimited)
+
+
 @inventory_bp.route("/inventory/product-images/<path:filename>")
 def product_image(filename):
     return send_from_directory(PRODUCT_IMAGE_FOLDER, filename)
@@ -175,6 +183,7 @@ def get_products():
         barcode_expr = "p.barcode" if "barcode" in product_columns else "NULL"
         category_id_expr = "p.category_id" if "category_id" in product_columns else "NULL"
         image_expr = "p.image" if "image" in product_columns else "NULL"
+        stock_unlimited_expr = "p.stock_unlimited" if "stock_unlimited" in product_columns else "0"
         category_join = (
             "LEFT JOIN categories c ON p.category_id=c.id"
             if "category_id" in product_columns and {"id", "name"}.issubset(category_columns)
@@ -188,7 +197,8 @@ def get_products():
                    {barcode_expr} AS barcode,
                    {category_id_expr} AS category_id,
                    {category_name_expr} AS category_name,
-                   {image_expr} AS image
+                   {image_expr} AS image,
+                   {stock_unlimited_expr} AS stock_unlimited
             FROM products p
             {category_join}
             ORDER BY p.name COLLATE NOCASE
@@ -357,7 +367,7 @@ def inventory_dashboard():
 
                 IFNULL(
 
-                    SUM(price*stock),
+                    SUM(CASE WHEN stock_unlimited=0 THEN price*stock ELSE 0 END),
 
                     0
 
@@ -379,7 +389,7 @@ def inventory_dashboard():
 
             FROM products
 
-            WHERE stock<=10
+            WHERE stock_unlimited=0 AND stock BETWEEN 0 AND 10
 
         """)
 
@@ -533,11 +543,10 @@ def add_product():
         category_id = data.get("category_id")
         barcode = data.get("barcode", "").strip()
         price = data.get("price", 0)
-        stock = data.get("stock", 0)
         try:
             price = float(price)
-            stock = int(stock)
-            if not math.isfinite(price) or price < 0 or stock < 0:
+            stock, stock_unlimited = _product_stock_values(data)
+            if not math.isfinite(price) or price < 0:
                 raise ValueError
         except (TypeError, ValueError):
             return error("Enter a valid non-negative price and whole-number stock.")
@@ -595,12 +604,14 @@ def add_product():
 
                 stock,
 
+                stock_unlimited,
+
                 barcode,
                 image
 
             )
 
-            VALUES(?,?,?,?,?,?)
+            VALUES(?,?,?,?,?,?,?)
 
         """,
 
@@ -613,6 +624,8 @@ def add_product():
             price,
 
             stock,
+
+            stock_unlimited,
 
             barcode,
             image_filename
@@ -670,11 +683,10 @@ def update_product(product_id):
         category_id = data.get("category_id")
         barcode = data.get("barcode", "").strip()
         price = data.get("price", 0)
-        stock = data.get("stock", 0)
         try:
             price = float(price)
-            stock = int(stock)
-            if not math.isfinite(price) or price < 0 or stock < 0:
+            stock, stock_unlimited = _product_stock_values(data)
+            if not math.isfinite(price) or price < 0:
                 raise ValueError
         except (TypeError, ValueError):
             return error("Enter a valid non-negative price and whole-number stock.")
@@ -744,6 +756,8 @@ def update_product(product_id):
 
                 stock=?,
 
+                stock_unlimited=?,
+
                 barcode=?,
                 image=COALESCE(?, image)
 
@@ -760,6 +774,8 @@ def update_product(product_id):
             price,
 
             stock,
+
+            stock_unlimited,
 
             barcode,
 
@@ -1129,7 +1145,8 @@ def export_inventory_excel():
 
                 p.price,
 
-                p.stock
+                p.stock,
+                p.stock_unlimited
 
             FROM products p
 
@@ -1171,7 +1188,7 @@ def export_inventory_excel():
 
                 product["price"],
 
-                product["stock"]
+                "Unlimited" if product["stock_unlimited"] else product["stock"]
 
             ])
 
@@ -1235,7 +1252,8 @@ def export_inventory_pdf():
 
                 p.price,
 
-                p.stock
+                p.stock,
+                p.stock_unlimited
 
             FROM products p
 
@@ -1297,7 +1315,7 @@ def export_inventory_pdf():
 
                 f"₹{product['price']:.2f}",
 
-                product["stock"]
+                "Unlimited" if product["stock_unlimited"] else product["stock"]
 
             ])
 

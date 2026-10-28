@@ -139,7 +139,7 @@ def dashboard_summary():
 
         FROM products
 
-        WHERE stock<=min_stock
+        WHERE stock_unlimited=0 AND stock<=min_stock
 
     """)
 
@@ -255,7 +255,7 @@ def inventory_card():
 
             IFNULL(
 
-                SUM(stock),
+                SUM(CASE WHEN stock_unlimited=0 THEN stock ELSE 0 END),
 
                 0
 
@@ -265,7 +265,7 @@ def inventory_card():
 
                 SUM(
 
-                    stock*cost_price
+                    CASE WHEN stock_unlimited=0 THEN stock*cost_price ELSE 0 END
 
                 ),
 
@@ -590,7 +590,7 @@ def dashboard_low_stock():
 
         FROM products
 
-        WHERE stock<=5
+        WHERE stock_unlimited=0 AND stock<=5
 
         ORDER BY stock ASC
 
@@ -1194,7 +1194,7 @@ def inventory_alerts():
 
         FROM products
 
-        WHERE stock<=min_stock
+        WHERE stock_unlimited=0 AND stock<=min_stock
 
         ORDER BY stock ASC
 
@@ -1231,7 +1231,7 @@ def dashboard_notifications():
 
         FROM products
 
-        WHERE stock<=min_stock
+        WHERE stock_unlimited=0 AND stock<=min_stock
 
     """)
 

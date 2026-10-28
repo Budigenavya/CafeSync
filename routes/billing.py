@@ -684,7 +684,7 @@ def create_order():
 
             cursor.execute("""
 
-                SELECT stock, is_available, price
+                SELECT stock, stock_unlimited, is_available, price
 
                 FROM products
 
@@ -718,7 +718,7 @@ def create_order():
                     "message": "One of the selected items is no longer available."
                 }), 409
 
-            if current_stock < quantity:
+            if not stock_row["stock_unlimited"] and current_stock < quantity:
 
                 conn.rollback()
 
@@ -793,51 +793,10 @@ def create_order():
             # UPDATE STOCK
             # ----------------------------------------------
 
-            cursor.execute("""
-
-                UPDATE products
-
-                SET stock = stock - ?
-
-                WHERE id = ?
-
-            """, (
-
-                quantity,
-
-                product_id
-
-            ))
-
-            # ----------------------------------------------
-            # INVENTORY LOG
-            # ----------------------------------------------
-
-            cursor.execute("""
-
-                INSERT INTO inventory_logs(
-
-                    product_id,
-
-                    quantity,
-
-                    action
-
-                )
-
-                VALUES(
-
-                    ?,?,'SALE'
-
-                )
-
-            """, (
-
-                product_id,
-
-                quantity
-
-            ))
+            if not stock_row["stock_unlimited"]:
+                cursor.execute("UPDATE products SET stock=stock-? WHERE id=?", (quantity, product_id))
+                cursor.execute("INSERT INTO inventory_logs(product_id,quantity,action) VALUES(?,?,'SALE')",
+                               (product_id, quantity))
 
             recipe_rows = cursor.execute(
                 "SELECT ingredient_id, quantity FROM recipes WHERE product_id=?",
@@ -1121,9 +1080,10 @@ def cancel_order(order_id):
             return jsonify({"success": False, "message": "Paid orders must be refunded instead of cancelled."}), 409
         items = cursor.execute("SELECT product_id, quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall()
         for item in items:
-            cursor.execute("UPDATE products SET stock=stock+? WHERE id=?", (item["quantity"], item["product_id"]))
-            cursor.execute("INSERT INTO inventory_logs(product_id, quantity, action, remarks) VALUES (?, ?, 'CANCEL', ?)",
-                           (item["product_id"], item["quantity"], f"Cancelled order {order_id}"))
+            cursor.execute("UPDATE products SET stock=stock+? WHERE id=? AND stock_unlimited=0", (item["quantity"], item["product_id"]))
+            if cursor.rowcount:
+                cursor.execute("INSERT INTO inventory_logs(product_id, quantity, action, remarks) VALUES (?, ?, 'CANCEL', ?)",
+                               (item["product_id"], item["quantity"], f"Cancelled order {order_id}"))
         ingredient_sales = cursor.execute("""
             SELECT ingredient_id, -SUM(quantity_change) AS quantity
             FROM ingredient_movements WHERE order_id=? AND movement_type='SALE'
@@ -1631,9 +1591,10 @@ def delete_order(order_id):
         items = cursor.execute("SELECT product_id, quantity FROM order_items WHERE order_id=?", (order_id,)).fetchall()
         if order[0] != "Cancelled":
             for item in items:
-                cursor.execute("UPDATE products SET stock=stock+? WHERE id=?", (item["quantity"], item["product_id"]))
-                cursor.execute("INSERT INTO inventory_logs(product_id, quantity, action, remarks) VALUES (?, ?, 'DELETE', ?)",
-                               (item["product_id"], item["quantity"], f"Deleted order {order_id}"))
+                cursor.execute("UPDATE products SET stock=stock+? WHERE id=? AND stock_unlimited=0", (item["quantity"], item["product_id"]))
+                if cursor.rowcount:
+                    cursor.execute("INSERT INTO inventory_logs(product_id, quantity, action, remarks) VALUES (?, ?, 'DELETE', ?)",
+                                   (item["product_id"], item["quantity"], f"Deleted order {order_id}"))
         cursor.execute("DELETE FROM order_items WHERE order_id=?", (order_id,))
         cursor.execute("DELETE FROM payments WHERE order_id=?", (order_id,))
         cursor.execute("DELETE FROM orders WHERE id=?", (order_id,))
@@ -2269,7 +2230,7 @@ def create_kot():
                 return jsonify({"success": False, "message": "Item quantity must be at least one."}), 400
 
             product = conn.execute(
-                "SELECT stock, is_available, price FROM products WHERE id=?",
+                "SELECT stock, stock_unlimited, is_available, price FROM products WHERE id=?",
                 (product_id,)
             ).fetchone()
             if not product:
@@ -2278,7 +2239,7 @@ def create_kot():
             if not product["is_available"]:
                 conn.rollback()
                 return jsonify({"success": False, "message": "One of the selected items is no longer available."}), 409
-            if int(product["stock"] or 0) < quantity:
+            if not product["stock_unlimited"] and int(product["stock"] or 0) < quantity:
                 conn.rollback()
                 return jsonify({"success": False, "message": "Insufficient stock for a selected item."}), 409
 
@@ -2312,11 +2273,12 @@ def create_kot():
                 json.dumps(selected_addons, ensure_ascii=False)
             ))
 
-            cursor.execute("UPDATE products SET stock=stock-? WHERE id=?", (quantity, product_id))
-            cursor.execute("""
-                INSERT INTO inventory_logs(product_id, quantity, action, remarks)
-                VALUES (?, ?, 'SALE', ?)
-            """, (product_id, quantity, f"Kitchen ticket {bill_no}"))
+            if not product["stock_unlimited"]:
+                cursor.execute("UPDATE products SET stock=stock-? WHERE id=?", (quantity, product_id))
+                cursor.execute("""
+                    INSERT INTO inventory_logs(product_id, quantity, action, remarks)
+                    VALUES (?, ?, 'SALE', ?)
+                """, (product_id, quantity, f"Kitchen ticket {bill_no}"))
 
             for recipe in cursor.execute("SELECT ingredient_id, quantity FROM recipes WHERE product_id=?", (product_id,)).fetchall():
                 used = float(recipe["quantity"]) * quantity

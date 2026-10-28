@@ -1653,3 +1653,16 @@ tbody tr{
 .stock-history-title{margin:22px 0 8px;color:#354c3e;font-size:15px}
 .recipe-cost-estimate{margin:0;color:#287a59;font-weight:700;font-size:12px}
 .unpriced-count{display:block;color:#a45a40;font-size:11px;margin-top:5px}
+.unlimited-stock-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 8px 0 14px;
+    color: #3e5148;
+    font-size: 13px;
+}
+
+.unlimited-stock-option input {
+    width: auto;
+    margin-top: 2px;
+}
