@@ -9,6 +9,7 @@
 from flask import Blueprint, jsonify, request, render_template
 from database import get_connection
 from routes.auth import login_required
+from datetime import datetime, time, timedelta, timezone
 
 # ==========================================================
 # BLUEPRINT
@@ -18,6 +19,26 @@ delivery_bp = Blueprint(
     "delivery",
     __name__
 )
+
+# Delivery orders share the normalized orders/customers schema used by billing.
+# Keep the older delivery API response shape as aliases at query time.
+_CHANNEL_SQL = """CASE
+    WHEN COALESCE(o.order_source, 'Cafe') IN ('Swiggy', 'Zomato') THEN o.order_source
+    WHEN o.order_type = 'Delivery' THEN 'Website'
+    WHEN o.order_type IN ('Parcel', 'Take Away', 'Takeaway') THEN 'TakeAway'
+    ELSE 'Cafe'
+END"""
+_DELIVERY_FILTER = """(
+    COALESCE(o.order_source, 'Cafe') IN ('Swiggy', 'Zomato')
+    OR o.order_type IN ('Delivery', 'Parcel', 'Take Away', 'Takeaway')
+)"""
+
+
+def _india_business_day_bounds_utc():
+    india_tz = timezone(timedelta(hours=5, minutes=30))
+    today_india = datetime.now(timezone.utc).astimezone(india_tz).date()
+    start_utc = datetime.combine(today_india, time.min, tzinfo=india_tz).astimezone(timezone.utc).replace(tzinfo=None)
+    return start_utc, start_utc + timedelta(days=1)
 
 @delivery_bp.route("/delivery")
 @login_required
@@ -40,20 +61,20 @@ def get_delivery_orders():
         cursor.execute("""
             SELECT
                 o.id,
-                o.order_number,
-                o.customer_name,
-                o.phone,
-                o.address,
+                o.bill_no AS order_number,
+                COALESCE(c.name, 'Walk-in Customer') AS customer_name,
+                COALESCE(c.phone, '') AS phone,
+                COALESCE(c.address, '') AS address,
                 o.total,
                 o.status,
                 o.payment_status,
-                o.platform,
+                {_CHANNEL_SQL} AS platform,
                 o.created_at
             FROM orders o
-            WHERE o.platform IN
-            ('Swiggy','Zomato','Website','TakeAway')
+            LEFT JOIN customers c ON c.id = o.customer_id
+            WHERE {_DELIVERY_FILTER}
             ORDER BY o.created_at DESC
-        """)
+        """.format(_CHANNEL_SQL=_CHANNEL_SQL, _DELIVERY_FILTER=_DELIVERY_FILTER))
 
         rows = cursor.fetchall()
 
@@ -111,42 +132,43 @@ def delivery_dashboard():
 
         conn = get_connection()
         cursor = conn.cursor()
+        day_start, day_end = _india_business_day_bounds_utc()
 
         cursor.execute("""
 
             SELECT COUNT(*) AS total_orders
 
             FROM orders
+            WHERE orders.created_at >= ? AND orders.created_at < ?
+              AND {delivery_filter}
 
-            WHERE platform IN
-            ('Swiggy','Zomato','Website','TakeAway')
-
-        """)
+        """.format(delivery_filter=_DELIVERY_FILTER.replace("o.", "orders.")), (day_start, day_end))
 
         total_orders = cursor.fetchone()["total_orders"]
 
         cursor.execute("""
 
-            SELECT IFNULL(SUM(total),0) AS revenue
+            SELECT IFNULL(SUM(CASE WHEN payment_status='Paid'
+                AND status NOT IN ('Cancelled','Refunded') THEN total ELSE 0 END),0) AS revenue
 
             FROM orders
+            WHERE orders.created_at >= ? AND orders.created_at < ?
+              AND {delivery_filter}
 
-            WHERE platform IN
-            ('Swiggy','Zomato','Website','TakeAway')
-
-        """)
+        """.format(delivery_filter=_DELIVERY_FILTER.replace("o.", "orders.")), (day_start, day_end))
 
         revenue = cursor.fetchone()["revenue"]
 
         cursor.execute("""
 
             SELECT COUNT(*) AS pending
-
             FROM orders
-
             WHERE status='Pending'
+              AND created_at >= ? AND created_at < ?
+              AND (COALESCE(order_source, 'Cafe') IN ('Swiggy', 'Zomato')
+                   OR order_type IN ('Delivery', 'Parcel', 'Take Away', 'Takeaway'))
 
-        """)
+        """, (day_start, day_end))
 
         pending = cursor.fetchone()["pending"]
 
@@ -211,14 +233,16 @@ def get_delivery_order(order_id):
         cursor = conn.cursor()
 
         cursor.execute("""
-
-            SELECT *
-
-            FROM orders
-
-            WHERE id=?
-
-        """,(order_id,))
+            SELECT o.*, o.bill_no AS order_number,
+                   COALESCE(c.name, 'Walk-in Customer') AS customer_name,
+                   COALESCE(c.phone, '') AS phone,
+                   COALESCE(c.address, '') AS address,
+                   {_CHANNEL_SQL} AS platform,
+                   0 AS delivery_charge
+            FROM orders o
+            LEFT JOIN customers c ON c.id = o.customer_id
+            WHERE o.id=?
+        """.format(_CHANNEL_SQL=_CHANNEL_SQL), (order_id,))
 
         order = cursor.fetchone()
 
@@ -336,21 +360,17 @@ def search_delivery_orders():
 
         cursor.execute("""
 
-            SELECT *
-
-            FROM orders
-
-            WHERE
-
-                order_number LIKE ?
-
-                OR customer_name LIKE ?
-                OR phone LIKE ?
-                OR address LIKE ?
-
-            ORDER BY created_at DESC
-
-        """,(
+            SELECT o.*, o.bill_no AS order_number,
+                   COALESCE(c.name, 'Walk-in Customer') AS customer_name,
+                   COALESCE(c.phone, '') AS phone,
+                   COALESCE(c.address, '') AS address,
+                   {_CHANNEL_SQL} AS platform,
+                   0 AS delivery_charge
+            FROM orders o
+            LEFT JOIN customers c ON c.id = o.customer_id
+            WHERE o.bill_no LIKE ? OR c.name LIKE ? OR c.phone LIKE ? OR c.address LIKE ?
+            ORDER BY o.created_at DESC
+        """.format(_CHANNEL_SQL=_CHANNEL_SQL),(
 
             f"%{keyword}%",
 
@@ -393,22 +413,12 @@ def platform_summary():
 
         cursor.execute("""
 
-            SELECT
-
-                platform,
-
-                COUNT(*) total_orders,
-
-                IFNULL(SUM(total),0) revenue
-
-            FROM orders
-
-            WHERE platform IN
-            ('Swiggy','Zomato','Website','TakeAway')
-
-            GROUP BY platform
-
-        """)
+            SELECT {_CHANNEL_SQL} AS platform,
+                   COUNT(*) total_orders, COALESCE(SUM(o.total),0) revenue
+            FROM orders o
+            WHERE {_DELIVERY_FILTER}
+            GROUP BY {_CHANNEL_SQL}
+        """.format(_CHANNEL_SQL=_CHANNEL_SQL, _DELIVERY_FILTER=_DELIVERY_FILTER))
 
         rows = cursor.fetchall()
 
@@ -455,56 +465,47 @@ def today_summary():
 
         cursor.execute("""
 
-            SELECT
-
-                COUNT(*) total,
-
-                IFNULL(SUM(total),0) revenue
-
-            FROM orders
-
-            WHERE DATE(created_at)=DATE('now')
-
-            AND platform IN
-            ('Swiggy','Zomato','Website','TakeAway')
-
-        """)
+            SELECT COUNT(*) total, COALESCE(SUM(o.total),0) revenue
+            FROM orders o
+            WHERE DATE(o.created_at, 'localtime')=DATE('now', 'localtime')
+              AND {_DELIVERY_FILTER}
+        """.format(_DELIVERY_FILTER=_DELIVERY_FILTER))
 
         summary = cursor.fetchone()
 
         cursor.execute("""
 
             SELECT COUNT(*) preparing
-
-            FROM orders
-
+            FROM orders o
             WHERE status='Preparing'
+              AND DATE(o.created_at, 'localtime')=DATE('now', 'localtime')
+              AND {_DELIVERY_FILTER}
 
-        """)
+        """.format(_DELIVERY_FILTER=_DELIVERY_FILTER))
 
         preparing = cursor.fetchone()["preparing"]
 
         cursor.execute("""
 
             SELECT COUNT(*) ready_orders
-
-            FROM orders
-
+            FROM orders o
             WHERE status='Ready'
+              AND DATE(o.created_at, 'localtime')=DATE('now', 'localtime')
+              AND {_DELIVERY_FILTER}
 
-        """)
+        """.format(_DELIVERY_FILTER=_DELIVERY_FILTER))
 
         ready = cursor.fetchone()["ready_orders"]
 
         cursor.execute("""
 
             SELECT COUNT(*) delivered
-
-            FROM orders
-
+            FROM orders o
             WHERE status='Delivered'
+              AND DATE(o.created_at, 'localtime')=DATE('now', 'localtime')
+              AND {_DELIVERY_FILTER}
 
-        """)
+        """.format(_DELIVERY_FILTER=_DELIVERY_FILTER))
 
         delivered = cursor.fetchone()["delivered"]
 
@@ -1157,30 +1158,15 @@ def tracking(order_id):
         cursor=conn.cursor()
 
         cursor.execute("""
-
-            SELECT
-
-                o.order_number,
-
-                o.status,
-
-                o.address,
-
-                r.name rider_name,
-
-                r.phone rider_phone,
-
-                r.current_location
-
+            SELECT o.bill_no AS order_number, o.status,
+                   COALESCE(c.address, '') AS address,
+                   r.name AS rider_name, r.phone AS rider_phone,
+                   r.current_location
             FROM orders o
-
-            LEFT JOIN riders r
-
-            ON o.rider_id=r.id
-
+            LEFT JOIN customers c ON c.id = o.customer_id
+            LEFT JOIN riders r ON o.rider_id=r.id
             WHERE o.id=?
-
-        """,(order_id,))
+        """, (order_id,))
 
         tracking=cursor.fetchone()
 
@@ -1271,7 +1257,6 @@ def available_riders():
 ==========================================================
 """
 
-from datetime import datetime
 import csv
 from io import StringIO
 from flask import Response
@@ -1291,36 +1276,19 @@ def delivery_analytics():
 
         cursor.execute("""
 
-            SELECT
-
-                COUNT(*) total_orders,
-
-                SUM(total) revenue,
-
-                AVG(total) average_bill
-
-            FROM orders
-
-            WHERE platform IN
-            ('Swiggy','Zomato','Website','TakeAway')
-
-        """)
+            SELECT COUNT(*) total_orders, SUM(o.total) revenue, AVG(o.total) average_bill
+            FROM orders o
+            WHERE {_DELIVERY_FILTER}
+        """.format(_DELIVERY_FILTER=_DELIVERY_FILTER))
 
         analytics = cursor.fetchone()
 
         cursor.execute("""
 
-            SELECT
-
-                platform,
-
-                COUNT(*) total
-
-            FROM orders
-
-            GROUP BY platform
-
-        """)
+            SELECT {_CHANNEL_SQL} AS platform, COUNT(*) total
+            FROM orders o
+            GROUP BY {_CHANNEL_SQL}
+        """.format(_CHANNEL_SQL=_CHANNEL_SQL))
 
         platform_stats = cursor.fetchall()
 
@@ -1382,7 +1350,7 @@ def monthly_report():
 
             SELECT
 
-                strftime('%Y-%m',created_at) month,
+                strftime('%Y-%m',datetime(created_at, '+5 hours', '+30 minutes')) AS month_label,
 
                 COUNT(*) orders,
 
@@ -1390,9 +1358,9 @@ def monthly_report():
 
             FROM orders
 
-            GROUP BY month
+            GROUP BY month_label
 
-            ORDER BY month DESC
+            ORDER BY month_label DESC
 
         """)
 
@@ -1404,7 +1372,7 @@ def monthly_report():
 
             {
 
-                "month":r["month"],
+                "month":r["month_label"],
 
                 "orders":r["orders"],
 
@@ -1434,21 +1402,22 @@ def monthly_report():
 @delivery_bp.route("/delivery/today")
 def today_deliveries():
 
-    today=datetime.now().strftime("%Y-%m-%d")
-
     conn=get_connection()
 
     cursor=conn.cursor()
 
     cursor.execute("""
 
-        SELECT *
-
-        FROM orders
-
-        WHERE DATE(created_at)=?
-
-    """,(today,))
+        SELECT o.*, o.bill_no AS order_number,
+               COALESCE(c.name, 'Walk-in Customer') AS customer_name,
+               COALESCE(c.phone, '') AS phone,
+               COALESCE(c.address, '') AS address,
+               {_CHANNEL_SQL} AS platform, 0 AS delivery_charge
+        FROM orders o
+        LEFT JOIN customers c ON c.id=o.customer_id
+        WHERE DATE(o.created_at, 'localtime')=DATE('now', 'localtime')
+          AND {_DELIVERY_FILTER}
+    """.format(_CHANNEL_SQL=_CHANNEL_SQL, _DELIVERY_FILTER=_DELIVERY_FILTER))
 
     rows=cursor.fetchall()
 
@@ -1470,27 +1439,15 @@ def export_delivery_report():
 
     cursor.execute("""
 
-        SELECT
-
-            order_number,
-
-            customer_name,
-
-            platform,
-
-            total,
-
-            payment_status,
-
-            status,
-
-            created_at
-
-        FROM orders
-
-        ORDER BY created_at DESC
-
-    """)
+        SELECT o.bill_no AS order_number,
+               COALESCE(c.name, 'Walk-in Customer') AS customer_name,
+               {_CHANNEL_SQL} AS platform, o.total, o.payment_status,
+               o.status, o.created_at
+        FROM orders o
+        LEFT JOIN customers c ON c.id=o.customer_id
+        WHERE {_DELIVERY_FILTER}
+        ORDER BY o.created_at DESC
+    """.format(_CHANNEL_SQL=_CHANNEL_SQL, _DELIVERY_FILTER=_DELIVERY_FILTER))
 
     rows=cursor.fetchall()
 
@@ -1570,20 +1527,10 @@ def delivery_notifications():
 
     cursor.execute("""
 
-        SELECT
-
-            order_number,
-
-            status,
-
-            created_at
-
+        SELECT bill_no AS order_number, status, created_at
         FROM orders
-
         ORDER BY created_at DESC
-
         LIMIT 10
-
     """)
 
     rows=cursor.fetchall()
@@ -1626,17 +1573,10 @@ def platform_revenue():
 
     cursor.execute("""
 
-        SELECT
-
-            platform,
-
-            SUM(total) revenue
-
-        FROM orders
-
-        GROUP BY platform
-
-    """)
+        SELECT {_CHANNEL_SQL} AS platform, SUM(o.total) revenue
+        FROM orders o
+        GROUP BY {_CHANNEL_SQL}
+    """.format(_CHANNEL_SQL=_CHANNEL_SQL))
 
     rows=cursor.fetchall()
 

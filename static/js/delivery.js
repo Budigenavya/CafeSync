@@ -540,32 +540,20 @@ function showEmptyBoard(){
 ==========================================================*/
 
 async function loadStatistics(){
-
-    document.getElementById("todayOrders").textContent=
-
-    deliveryOrders.length;
-
-    let revenue=0;
-
-    let pending=0;
-
-    deliveryOrders.forEach(order=>{
-
-        revenue+=Number(order.total);
-
-        if(order.status==="Pending")
-
-            pending++;
-
-    });
-
-    document.getElementById("todayRevenue").textContent=
-
-    "₹"+revenue.toFixed(2);
-
-    document.getElementById("pendingOrders").textContent=
-
-    pending;
+    try {
+        const response = await fetch(`${API}/delivery/dashboard`, {credentials:"same-origin"});
+        if (!response.ok) throw new Error("Could not load delivery statistics");
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message || "Could not load delivery statistics");
+        document.getElementById("todayOrders").textContent = result.today_orders || 0;
+        document.getElementById("todayRevenue").textContent = "₹" + Number(result.today_revenue || 0).toFixed(2);
+        document.getElementById("pendingOrders").textContent = result.pending_orders || 0;
+    } catch (error) {
+        console.error(error);
+        document.getElementById("todayOrders").textContent = "—";
+        document.getElementById("todayRevenue").textContent = "—";
+        document.getElementById("pendingOrders").textContent = "—";
+    }
 
 }
 /*==========================================================
