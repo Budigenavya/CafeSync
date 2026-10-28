@@ -50,6 +50,26 @@ document.getElementById("paymentStateFilter");
 const dateFilter =
 document.getElementById("filterDate");
 
+const indiaDateFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+});
+
+function businessDate(value) {
+    let date = value;
+    if (!(value instanceof Date)) {
+        const text = String(value ?? "").trim();
+        const naiveTimestamp = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(text);
+        date = new Date(naiveTimestamp ? `${text.replace(" ", "T")}Z` : text);
+    }
+    if (Number.isNaN(date.getTime())) return "";
+    return indiaDateFormatter.format(date);
+}
+
+dateFilter.value = businessDate(new Date());
+
 const refreshBtn =
 document.getElementById("refreshOrders");
 
@@ -96,11 +116,9 @@ async function loadOrders(){
 
             updateHistoryTabs();
 
-            filteredOrders = [...orders];
+            applyFilters();
 
             await loadDashboard();
-
-            renderOrders();
 
         }
 
@@ -1061,13 +1079,7 @@ function applyFilters(){
 
         if(date){
 
-            const orderDate =
-
-            new Date(order.created_at)
-
-            .toISOString()
-
-            .split("T")[0];
+            const orderDate = businessDate(order.created_at);
 
             matchesDate =
 

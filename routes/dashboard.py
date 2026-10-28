@@ -32,7 +32,8 @@ def dashboard_overview():
                IFNULL(SUM(CASE WHEN payment_status='Paid' THEN total ELSE 0 END), 0) AS sales,
                IFNULL(AVG(CASE WHEN payment_status='Paid' THEN total END), 0) AS average_order
         FROM orders
-        WHERE DATE(created_at)=DATE('now','localtime')
+        WHERE DATE(datetime(created_at, '+5 hours', '+30 minutes')) =
+              DATE('now', '+5 hours', '+30 minutes')
     """)
     return jsonify({
         "today_orders": sales["orders"] or 0,
@@ -384,7 +385,8 @@ def today_sales():
 
         FROM orders
 
-        WHERE DATE(created_at)=DATE('now','localtime')
+        WHERE DATE(datetime(created_at, '+5 hours', '+30 minutes')) =
+              DATE('now', '+5 hours', '+30 minutes')
 
         AND payment_status='Paid'
 
@@ -674,7 +676,7 @@ def sales_trend():
 
         SELECT
 
-            DATE(created_at) AS sales_date,
+            DATE(datetime(created_at, '+5 hours', '+30 minutes')) AS sales_date,
 
             COUNT(*) AS orders,
 
@@ -690,9 +692,9 @@ def sales_trend():
 
         WHERE payment_status='Paid'
 
-        GROUP BY DATE(created_at)
+        GROUP BY DATE(datetime(created_at, '+5 hours', '+30 minutes'))
 
-        ORDER BY DATE(created_at) DESC
+        ORDER BY DATE(datetime(created_at, '+5 hours', '+30 minutes')) DESC
 
         LIMIT 7
 
