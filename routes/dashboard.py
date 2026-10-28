@@ -12,6 +12,7 @@ from models import fetch_one
 from database import get_connection
 from routes.auth import login_required
 from models import fetch_all
+from datetime import date as date_type, datetime, time, timedelta, timezone
 
 dashboard_bp = Blueprint(
     "dashboard",
@@ -24,22 +25,142 @@ def dashboard():
     return render_template("dashboard.html")
 
 
+@dashboard_bp.route("/dashboard/sales-statistics", methods=["GET"])
+@login_required
+def dashboard_sales_statistics():
+    """Sales and order-channel breakdown for an India-local business date."""
+    selected_date = request.args.get("date", "")
+    if selected_date:
+        try:
+            selected_date = date_type.fromisoformat(selected_date).isoformat()
+        except ValueError:
+            return jsonify({"error": "date must use YYYY-MM-DD"}), 400
+    else:
+        selected_date = date_type.today().isoformat()
+
+    conn = get_connection()
+    try:
+        # created_at is stored in SQLite's server time (UTC on Render); convert
+        # it to the cafe's India-local date before grouping.
+        day_expr = "DATE(datetime(o.created_at, '+5 hours', '+30 minutes'))"
+        orders = conn.execute(f"""
+            SELECT o.id, o.total, o.subtotal, o.discount, o.payment_method,
+                   o.payment_status, o.status, o.order_type, o.order_source,
+                   o.created_at
+            FROM orders o WHERE {day_expr}=?
+            ORDER BY o.created_at
+        """, (selected_date,)).fetchall()
+        order_ids = [row["id"] for row in orders]
+        payments = {}
+        if order_ids:
+            placeholders = ",".join("?" for _ in order_ids)
+            for row in conn.execute(f"""
+                SELECT order_id, payment_type, SUM(amount) AS amount
+                FROM payments WHERE order_id IN ({placeholders})
+                  AND LOWER(COALESCE(payment_status,'paid'))='paid'
+                GROUP BY order_id, payment_type
+            """, order_ids).fetchall():
+                payments.setdefault(row["order_id"], []).append(row)
+
+        channel_names = {"dine in": "Dine In", "dine-in": "Dine In",
+                         "parcel": "Parcel", "take away": "Parcel", "takeaway": "Parcel",
+                         "delivery": "Delivery"}
+        channels = {name: {"orders": 0, "sales": 0.0} for name in ("Dine In", "Parcel", "Delivery")}
+        hourly = {}
+        payment_totals = {}
+        successful = cancelled = unpaid = 0
+        gross_sales = discount_total = 0.0
+        for row in orders:
+            status = str(row["status"] or "").lower()
+            payment_status = str(row["payment_status"] or "").lower()
+            if status == "cancelled" or payment_status == "cancelled":
+                cancelled += 1
+                continue
+            if status == "refunded" or payment_status == "refunded":
+                continue
+            paid = payment_status == "paid"
+            if paid:
+                successful += 1
+                gross_sales += float(row["total"] or 0)
+            else:
+                unpaid += 1
+            discount_total += float(row["discount"] or 0)
+            channel_key = str(row["order_type"] or "").strip().lower()
+            channel = channel_names.get(channel_key)
+            if not channel and str(row["order_source"] or "").lower() in ("swiggy", "zomato"):
+                channel = "Delivery"
+            if channel in channels:
+                channels[channel]["orders"] += 1
+                if paid:
+                    channels[channel]["sales"] += float(row["total"] or 0)
+            hour = conn.execute("SELECT strftime('%H', datetime(?, '+5 hours', '+30 minutes'))", (row["created_at"],)).fetchone()[0]
+            slot = (int(hour or 0) // 2) * 2
+            bucket = hourly.setdefault(slot, {"Dine In": 0.0, "Parcel": 0.0, "Delivery": 0.0})
+            if paid and channel in bucket:
+                bucket[channel] += float(row["total"] or 0)
+            if paid:
+                if payments.get(row["id"]):
+                    for payment in payments[row["id"]]:
+                        method = str(payment["payment_type"] or "Other").title()
+                        payment_totals[method] = payment_totals.get(method, 0) + float(payment["amount"] or 0)
+                else:
+                    method = str(row["payment_method"] or "Other").title()
+                    payment_totals[method] = payment_totals.get(method, 0) + float(row["total"] or 0)
+
+        # Item performance follows paid, non-cancelled bills for the selected day.
+        top_items = []
+        if order_ids:
+            placeholders = ",".join("?" for _ in order_ids)
+            top_items = [dict(r) for r in conn.execute(f"""
+                SELECT COALESCE(p.name, 'Item') AS name, SUM(oi.quantity) AS quantity,
+                       SUM(oi.quantity * oi.price) AS sales
+                FROM order_items oi JOIN orders o ON o.id=oi.order_id
+                LEFT JOIN products p ON p.id=oi.product_id
+                WHERE oi.order_id IN ({placeholders}) AND LOWER(COALESCE(o.payment_status,''))='paid'
+                  AND LOWER(COALESCE(o.status,'')) NOT IN ('cancelled','refunded')
+                GROUP BY oi.product_id, p.name ORDER BY sales DESC LIMIT 5
+            """, order_ids).fetchall()]
+        return jsonify({
+            "date": selected_date, "sales": gross_sales, "total_orders": len(orders),
+            "successful_orders": successful, "cancelled_orders": cancelled, "unpaid_orders": unpaid,
+            "average_order": gross_sales / successful if successful else 0,
+            "discounts": discount_total, "payment_methods": payment_totals,
+            "channels": channels,
+            "hourly": [{"label": f"{h:02d}:00–{(h+2)%24:02d}:00", **values}
+                       for h, values in sorted(hourly.items())],
+            "top_items": top_items,
+            "audit": {"cancelled": cancelled, "discounted_bills": sum(1 for r in orders if float(r["discount"] or 0) > 0),
+                      "modified_kots": None, "shifted_kots": None, "modified_bills": None, "reprinted_bills": None}
+        })
+    finally:
+        conn.close()
+
+
 @dashboard_bp.route("/dashboard/overview", methods=["GET"])
 def dashboard_overview():
     """Return cafe dashboard figures for the current local business day."""
-    sales = fetch_one("""
-        SELECT COUNT(*) AS orders,
-               IFNULL(SUM(CASE WHEN payment_status='Paid' THEN total ELSE 0 END), 0) AS sales,
-               IFNULL(AVG(CASE WHEN payment_status='Paid' THEN total END), 0) AS average_order
-        FROM orders
-        WHERE DATE(datetime(created_at, '+5 hours', '+30 minutes')) =
-              DATE('now', '+5 hours', '+30 minutes')
-    """)
-    return jsonify({
-        "today_orders": sales["orders"] or 0,
-        "today_sales": sales["sales"] or 0,
-        "average_order": sales["average_order"] or 0
-    })
+    india_tz = timezone(timedelta(hours=5, minutes=30))
+    today_india = datetime.now(timezone.utc).astimezone(india_tz).date()
+    start_utc = datetime.combine(today_india, time.min, tzinfo=india_tz).astimezone(timezone.utc).replace(tzinfo=None)
+    end_utc = start_utc + timedelta(days=1)
+    conn = get_connection()
+    try:
+        sales = conn.execute("""
+            SELECT COUNT(*) AS orders,
+                   IFNULL(SUM(CASE WHEN payment_status='Paid'
+                       AND status NOT IN ('Cancelled','Refunded') THEN total ELSE 0 END), 0) AS sales,
+                   IFNULL(AVG(CASE WHEN payment_status='Paid'
+                       AND status NOT IN ('Cancelled','Refunded') THEN total END), 0) AS average_order
+            FROM orders
+            WHERE created_at >= ? AND created_at < ?
+        """, (start_utc, end_utc)).fetchone()
+        return jsonify({
+            "today_orders": sales["orders"] or 0,
+            "today_sales": sales["sales"] or 0,
+            "average_order": sales["average_order"] or 0
+        })
+    finally:
+        conn.close()
 
 
 # ==========================================================
